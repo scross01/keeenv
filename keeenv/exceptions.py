@@ -35,6 +35,21 @@ class ConfigError(KeeenvError):
         super().__init__(message, original_exception)
 
 
+class ConfigFileNotFoundError(ConfigError):
+    """Raised when configuration file is not found."""
+    pass
+
+
+class ConfigSectionMissingError(ConfigError):
+    """Raised when required configuration section is missing."""
+    pass
+
+
+class ConfigKeyMissingError(ConfigError):
+    """Raised when required configuration key is missing."""
+    pass
+
+
 class KeePassError(KeeenvError):
     """KeePass-related errors."""
 
@@ -47,6 +62,21 @@ class KeePassError(KeeenvError):
             original_exception: Original exception that caused this error
         """
         super().__init__(message, original_exception)
+
+
+class KeePassCredentialsError(KeePassError):
+    """Raised when KeePass credentials are invalid."""
+    pass
+
+
+class KeePassEntryNotFoundError(KeePassError):
+    """Raised when KeePass entry is not found."""
+    pass
+
+
+class KeePassAttributeNotFoundError(KeePassError):
+    """Raised when KeePass attribute is not found."""
+    pass
 
 
 class ValidationError(KeeenvError):
@@ -63,6 +93,21 @@ class ValidationError(KeeenvError):
         super().__init__(message, original_exception)
 
 
+class PathValidationError(ValidationError):
+    """Raised when path validation fails."""
+    pass
+
+
+class EntryTitleValidationError(ValidationError):
+    """Raised when entry title validation fails."""
+    pass
+
+
+class AttributeValidationError(ValidationError):
+    """Raised when attribute validation fails."""
+    pass
+
+
 class SecurityError(KeeenvError):
     """Security-related errors."""
 
@@ -75,3 +120,13 @@ class SecurityError(KeeenvError):
             original_exception: Original exception that caused this error
         """
         super().__init__(message, original_exception)
+
+
+class DatabaseSecurityError(SecurityError):
+    """Raised when database security validation fails."""
+    pass
+
+
+class KeyfileSecurityError(SecurityError):
+    """Raised when keyfile security validation fails."""
+    pass

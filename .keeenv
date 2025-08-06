@@ -1,6 +1,5 @@
 [keepass]
 database=secrets.kdbx
-keyfile=LICENSE
 
 [env]
 SECRET_USERNAME = ${"My Secret".Username}

@@ -4,12 +4,70 @@ Input validation for keeenv - Populate environment variables from Keepass
 
 import os
 import re
+import sys
 from pathlib import Path
 from typing import Optional
-from .exceptions import ValidationError
+from .exceptions import (
+    ValidationError,
+    PathValidationError,
+    EntryTitleValidationError,
+    AttributeValidationError,
+    DatabaseSecurityError,
+    KeyfileSecurityError,
+)
 
 
-class PathValidator:
+# Constants for validation limits
+MAX_TITLE_LENGTH = 255
+MIN_ASCII_VALUE = 32
+MAX_ASCII_VALUE = 126
+
+# Constants for regex patterns
+CUSTOM_PROPERTY_PATTERN = r"^[a-zA-Z_][a-zA-Z0-9_ ]*$"
+
+# Constants for error messages
+ERROR_TITLE_TOO_LONG = f"Entry title too long (max {MAX_TITLE_LENGTH} characters)"
+ERROR_TITLE_INVALID_CHARS = "Entry title contains invalid characters"
+ERROR_PATH_INVALID_FORMAT = "Invalid path format"
+ERROR_ATTR_INVALID_NAME = "Invalid attribute name"
+ERROR_KEYFILE_WORLD_READABLE = "Keyfile is world-readable. Please restrict permissions to owner only."
+ERROR_DATABASE_WORLD_READABLE = "Database file is world-readable. Please restrict permissions to owner only."
+ERROR_PATH_MUST_BE_STRING = "Path must be a non-empty string"
+ERROR_TITLE_MUST_BE_STRING = "Entry title must be a non-empty string"
+ERROR_ATTR_MUST_BE_STRING = "Attribute must be a non-empty string"
+ERROR_FILE_NOT_FOUND = "File not found: {path}"
+ERROR_PATH_NOT_FILE = "Path is not a file: {path}"
+ERROR_INVALID_PATH = "Invalid path: {error}"
+ERROR_CANNOT_ACCESS_DB = "Cannot access database file: {error}"
+ERROR_CANNOT_ACCESS_KEYFILE = "Cannot access keyfile: {error}"
+
+
+class BaseValidator:
+    """Base class for validators with common validation logic."""
+    
+    @staticmethod
+    def validate_non_empty_string(value: Optional[str], field_name: str) -> str:
+        """Validate that a value is a non-empty string."""
+        if not value or not isinstance(value, str):
+            raise ValidationError(f"{field_name} must be a non-empty string")
+        return value
+    
+    @staticmethod
+    def validate_string_length(value: str, max_length: int, field_name: str) -> str:
+        """Validate that a string does not exceed maximum length."""
+        if len(value) > max_length:
+            raise ValidationError(f"{field_name} too long (max {max_length} characters)")
+        return value
+    
+    @staticmethod
+    def validate_ascii_chars(value: str, field_name: str) -> str:
+        """Validate that a string contains only ASCII printable characters."""
+        if any(ord(char) < MIN_ASCII_VALUE or ord(char) > MAX_ASCII_VALUE for char in value):
+            raise ValidationError(f"{field_name} contains invalid characters")
+        return value
+
+
+class PathValidator(BaseValidator):
     """Validates file paths with security checks."""
 
     @staticmethod
@@ -25,30 +83,30 @@ class PathValidator:
             Validated Path object
 
         Raises:
-            ValidationError: If path is invalid or file doesn't exist when required
+            PathValidationError: If path is invalid or file doesn't exist when required
         """
-        if not path or not isinstance(path, str):
-            raise ValidationError("Path must be a non-empty string")
+        # Validate basic string requirements
+        validated_path = BaseValidator.validate_non_empty_string(path, "Path")
 
         # Prevent directory traversal
-        if ".." in path or path.startswith("~"):
-            raise ValidationError("Invalid path format")
+        if ".." in validated_path or validated_path.startswith("~"):
+            raise PathValidationError(ERROR_PATH_INVALID_FORMAT)
 
         try:
-            expanded_path = Path(path).expanduser().resolve()
+            expanded_path = Path(validated_path).expanduser().resolve()
         except (OSError, RuntimeError) as e:
-            raise ValidationError(f"Invalid path: {e}")
+            raise PathValidationError(ERROR_INVALID_PATH.format(error=e))
 
         if must_exist and not expanded_path.exists():
-            raise ValidationError(f"File not found: {expanded_path}")
+            raise PathValidationError(ERROR_FILE_NOT_FOUND.format(path=expanded_path))
 
         if must_exist and not expanded_path.is_file():
-            raise ValidationError(f"Path is not a file: {expanded_path}")
+            raise PathValidationError(ERROR_PATH_NOT_FILE.format(path=expanded_path))
 
         return expanded_path
 
 
-class EntryValidator:
+class EntryValidator(BaseValidator):
     """Validates KeePass entry titles."""
 
     @staticmethod
@@ -63,22 +121,23 @@ class EntryValidator:
             Validated and stripped title
 
         Raises:
-            ValidationError: If title is invalid
+            EntryTitleValidationError: If title is invalid
         """
-        if not title or not isinstance(title, str):
-            raise ValidationError("Entry title must be a non-empty string")
+        # Validate basic string requirements
+        validated_title = BaseValidator.validate_non_empty_string(title, "Entry title")
+        
+        # Validate length
+        validated_title = BaseValidator.validate_string_length(
+            validated_title, MAX_TITLE_LENGTH, "Entry title"
+        )
+        
+        # Validate character set
+        validated_title = BaseValidator.validate_ascii_chars(validated_title, "Entry title")
 
-        if len(title) > 255:
-            raise ValidationError("Entry title too long (max 255 characters)")
-
-        # Basic sanitization
-        if any(ord(char) < 32 or ord(char) > 126 for char in title):
-            raise ValidationError("Entry title contains invalid characters")
-
-        return title.strip()
+        return validated_title.strip()
 
 
-class AttributeValidator:
+class AttributeValidator(BaseValidator):
     """Validates KeePass attribute names."""
 
     SUPPORTED_ATTRIBUTES = {"username", "password", "url", "notes"}
@@ -95,23 +154,23 @@ class AttributeValidator:
             Validated attribute name
 
         Raises:
-            ValidationError: If attribute name is invalid
+            AttributeValidationError: If attribute name is invalid
         """
-        if not attribute or not isinstance(attribute, str):
-            raise ValidationError("Attribute must be a non-empty string")
+        # Validate basic string requirements
+        validated_attr = BaseValidator.validate_non_empty_string(attribute, "Attribute")
 
         # Check for quoted attributes (custom properties)
-        if attribute.startswith('"') and attribute.endswith('"'):
-            attribute = attribute[1:-1]
+        if validated_attr.startswith('"') and validated_attr.endswith('"'):
+            validated_attr = validated_attr[1:-1]
 
-        if attribute.lower() in AttributeValidator.SUPPORTED_ATTRIBUTES:
-            return attribute.lower()
+        if validated_attr.lower() in AttributeValidator.SUPPORTED_ATTRIBUTES:
+            return validated_attr.lower()
 
         # Validate custom property names
-        if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_ ]*$", attribute):
-            raise ValidationError(f"Invalid attribute name: {attribute}")
+        if not re.match(CUSTOM_PROPERTY_PATTERN, validated_attr):
+            raise AttributeValidationError(f"{ERROR_ATTR_INVALID_NAME}: {validated_attr}")
 
-        return attribute
+        return validated_attr
 
 
 class SecurityValidator:
@@ -129,18 +188,18 @@ class SecurityValidator:
             keyfile_path: Optional path to keyfile
 
         Raises:
-            ValidationError: If security checks fail
+            DatabaseSecurityError: If database security checks fail
+            KeyfileSecurityError: If keyfile security checks fail
         """
         try:
             db_stat = os.stat(db_path)
         except OSError as e:
-            raise ValidationError(f"Cannot access database file: {e}")
+            raise DatabaseSecurityError(ERROR_CANNOT_ACCESS_DB.format(error=e))
 
         # Check if database is world-readable
         if db_stat.st_mode & 0o044:
-            raise ValidationError(
-                f"Database file {db_path} is world-readable. "
-                "Please restrict permissions to owner only."
+            raise DatabaseSecurityError(
+                f"{ERROR_DATABASE_WORLD_READABLE} {db_path}"
             )
 
         # Check keyfile permissions if present
@@ -148,9 +207,9 @@ class SecurityValidator:
             try:
                 key_stat = os.stat(keyfile_path)
                 if key_stat.st_mode & 0o044:
-                    raise ValidationError(
-                        f"Keyfile {keyfile_path} is world-readable. "
-                        "Please restrict permissions to owner only."
+                    print(
+                        f"Warning: {ERROR_KEYFILE_WORLD_READABLE} {keyfile_path}",
+                        file=sys.stderr
                     )
             except OSError as e:
-                raise ValidationError(f"Cannot access keyfile: {e}")
+                raise KeyfileSecurityError(ERROR_CANNOT_ACCESS_KEYFILE.format(error=e))

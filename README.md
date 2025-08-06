@@ -5,15 +5,19 @@
 ## Installation
 
 ```bash
-pip install keeenv
+uvx https://github.com/scross01/keeenv.git
+```
+
+```shell
+uv tool install https://github.com/scross01/keeenv.git
 ```
 
 For development:
 
 ```bash
-git clone https://github.com/yourusername/keeenv.git
+git clone https://github.com/scross01/keeenv.git
 cd keeenv
-pip install -e .
+uv sync
 ```
 
 ## Usage
@@ -87,36 +91,6 @@ CUSTOM_KEY = ${"My Secret"."API Key"}
 DATABASE_URL = ${"Production Database".Connection String}
 ```
 
-## Error Handling
-
-keeenv provides detailed error messages to help diagnose issues:
-
-### Configuration Errors
-
-- `Configuration validation failed` - Invalid `.keeenv` file format
-- `Missing required [keepass] section` - Missing database configuration
-- `Missing required 'database' key` - No database path specified
-- `Failed to parse config file` - TOML syntax errors
-
-### Path Validation Errors
-
-- `Path must be a non-empty string` - Empty or invalid path
-- `Invalid path format` - Directory traversal attempts
-- `File not found` - Database or keyfile doesn't exist
-- `Path is not a file` - Directory specified instead of file
-
-### KeePass Errors
-
-- `Entry with title 'X' not found` - Invalid entry name
-- `Attribute 'X' not found` - Invalid attribute name
-- `Invalid master password or key file` - Authentication failure
-- `Failed to access entry 'X'` - Database access errors
-
-### Security Errors
-
-- `Database file X is world-readable` - Insecure file permissions
-- `Keyfile X is world-readable` - Insecure keyfile permissions
-
 ## Why keeenv? The challenges with .env files
 
 .env files are a very convinient way to set local project variables and are often used system credientials and api keys. But storing sensitive information in open text files has some challenges and concerns:
@@ -176,4 +150,4 @@ Note: setting additional attributes using keepassxc-cli is not currently support
 
 4. **Environment Variables**: Use uppercase names for environment variables by convention
 
-5. **Configuration Location**: Keep your `.keeenv` file in your project root and add it to `.gitignore`
+5. **Configuration Location**: Keep your `.keeenv` file in your project root
