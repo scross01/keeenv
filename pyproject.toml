@@ -1,0 +1,9 @@
+[project]
+name = "keeenv"
+version = "0.1.0"
+description = "Set local environments variables from Keepass"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pykeepass>=4.1.1.post1",
+]
