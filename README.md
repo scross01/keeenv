@@ -36,6 +36,25 @@ SECRET_URL = ${"My Secret".URL}
 SECRET_API_KEY = ${"My Secret"."API Key"}
 ```
 
+### Command-line options
+
+The CLI supports the following options:
+
+- `--version`
+  Show program version and exit.
+
+- `--quiet`
+  Reduce logging output (only errors).
+
+- `--verbose`
+  Increase logging verbosity (debug details).
+
+- `--config PATH`
+  Path to configuration file. Defaults to `.keeenv` in the current directory.
+
+- `--strict`
+  Fail if any placeholder cannot be resolved.
+
 ### Configuration Options
 
 The `[keepass]` section configures the Keepass database to use:
@@ -44,6 +63,43 @@ The `[keepass]` section configures the Keepass database to use:
 - `keyfile` - (optional) full or relative path to the Keepass database key file
 
 The `[env]` section sets the environment variables using `${}` to enclose substitutions from Keepass in the format of `"Entry Title".Attribute`, e.g. `"My Account".Password`
+
+### Behavior and logging
+
+- The tool prints shell-safe `export` commands to stdout to be consumed by your shell (e.g., using `eval "$(keeenv)"`).
+- Logging goes to stderr using Python’s logging module and is controlled by `--quiet`/`--verbose`. Default level is WARNING.
+
+### Examples
+
+Basic usage:
+```bash
+eval "$(keeenv)"
+```
+
+Custom config path:
+```bash
+eval "$(keeenv --config ./config/.keeenv)"
+```
+
+Strict mode:
+```bash
+eval "$(keeenv --strict)"
+```
+
+Increase verbosity:
+```bash
+eval "$(keeenv --verbose)"
+```
+
+Quiet mode:
+```bash
+eval "$(keeenv --quiet)"
+```
+
+Combine options:
+```bash
+eval "$(keeenv --config ./secrets/.keeenv --strict --verbose)"
+```
 
 ### Validation Rules
 
@@ -90,6 +146,13 @@ Custom attributes are also supported. If the name contains spaces or special cha
 CUSTOM_KEY = ${"My Secret"."API Key"}
 DATABASE_URL = ${"Production Database".Connection String}
 ```
+
+## Exit codes
+
+- `0` on success
+- `1` on any failure (configuration errors, validation errors, KeePass access issues, or unexpected exceptions)
+
+This single nonzero exit code policy is implemented in the CLI wrapper (see [keeenv/main.py](keeenv/main.py:9-26)).
 
 ## Why keeenv? The challenges with .env files
 

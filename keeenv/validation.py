@@ -4,13 +4,11 @@ Input validation for keeenv - Populate environment variables from Keepass
 
 import os
 import re
-import sys
 from pathlib import Path
 from typing import Optional
 from .exceptions import (
     ValidationError,
     PathValidationError,
-    EntryTitleValidationError,
     AttributeValidationError,
     DatabaseSecurityError,
     KeyfileSecurityError,
@@ -97,7 +95,7 @@ class PathValidator(BaseValidator):
         validated_path = BaseValidator.validate_non_empty_string(path, "Path")
 
         # Prevent directory traversal
-        if ".." in validated_path or validated_path.startswith("~"):
+        if ".." in validated_path:
             raise PathValidationError(ERROR_PATH_INVALID_FORMAT)
 
         try:
@@ -208,18 +206,36 @@ class SecurityValidator:
         except OSError as e:
             raise DatabaseSecurityError(ERROR_CANNOT_ACCESS_DB.format(error=e))
 
-        # Check if database is world-readable
-        if db_stat.st_mode & 0o044:
-            raise DatabaseSecurityError(f"{ERROR_DATABASE_WORLD_READABLE} {db_path}")
+        # Only perform POSIX permission checks on POSIX systems
+        if os.name == "posix":
+            # Check if database is world-readable
+            if db_stat.st_mode & 0o044:
+                # Downgrade to warning (respect --quiet/--verbose)
+                import logging as _logging  # local import to avoid unused at module scope
+                _logging.getLogger(__name__).warning(
+                    "%s %s", ERROR_DATABASE_WORLD_READABLE, db_path
+                )
 
-        # Check keyfile permissions if present
-        if keyfile_path:
-            try:
-                key_stat = os.stat(keyfile_path)
-                if key_stat.st_mode & 0o044:
-                    print(
-                        f"Warning: {ERROR_KEYFILE_WORLD_READABLE} {keyfile_path}",
-                        file=sys.stderr,
+            # Check keyfile permissions if present
+            if keyfile_path:
+                try:
+                    key_stat = os.stat(keyfile_path)
+                    if key_stat.st_mode & 0o044:
+                        import logging as _logging  # local import to avoid unused at module scope
+                        _logging.getLogger(__name__).warning(
+                            "%s %s", ERROR_KEYFILE_WORLD_READABLE, keyfile_path
+                        )
+                except OSError as e:
+                    raise KeyfileSecurityError(
+                        ERROR_CANNOT_ACCESS_KEYFILE.format(error=e)
                     )
-            except OSError as e:
-                raise KeyfileSecurityError(ERROR_CANNOT_ACCESS_KEYFILE.format(error=e))
+        else:
+            # On non-POSIX systems, skip mode-bit checks
+            if keyfile_path:
+                try:
+                    # Still attempt to access keyfile to surface access errors
+                    os.stat(keyfile_path)
+                except OSError as e:
+                    raise KeyfileSecurityError(
+                        ERROR_CANNOT_ACCESS_KEYFILE.format(error=e)
+                    )

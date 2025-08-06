@@ -6,8 +6,8 @@ import configparser
 import getpass
 import os
 import re
-import sys
 import shlex
+import logging
 from typing import Optional, List
 from pykeepass import PyKeePass
 from pykeepass.exceptions import CredentialsError
@@ -149,13 +149,19 @@ def get_keepass_secret(kp: PyKeePass, title: str, attribute: str) -> Optional[st
     except Exception as e:
         if isinstance(e, (KeePassError, ValidationError)):
             raise
-        raise KeePassError(f"Failed to access entry '{validated_title}': {str(e)}")
+        # Use original input 'title' to avoid referencing a possibly unassigned variable
+        raise KeePassError(f"Failed to access entry '{title}': {str(e)}")
 
 
-def substitute_value(kp: PyKeePass, value_template: str) -> str:
-    """Substitutes placeholders in a string with values from Keepass."""
-    new_value = value_template
-    for match in PLACEHOLDER_REGEX.finditer(value_template):
+def substitute_value(kp: PyKeePass, value_template: str, strict: bool = False) -> str:
+    """Substitutes placeholders in a string with values from Keepass.
+
+    Uses a single-pass re.sub with a callable to avoid accidental double replacement
+    when resolved secrets contain placeholder-like patterns.
+    """
+    logger = logging.getLogger(__name__)
+
+    def _replace(match: re.Match) -> str:
         placeholder = match.group(0)
         title = match.group(1)
         # Check for quoted attribute first (group 2), then unquoted (group 3)
@@ -164,30 +170,30 @@ def substitute_value(kp: PyKeePass, value_template: str) -> str:
         try:
             secret = get_keepass_secret(kp, title, attribute)
             if secret is not None:
-                new_value = new_value.replace(placeholder, secret)
-            else:
-                # Set to blank if secret retrieval failed
-                print(
-                    f"Warning: Could not resolve placeholder {placeholder}",
-                    file=sys.stderr,
-                )
-                new_value = new_value.replace(placeholder, "")
+                return secret
+            # secret is None → unresolved
+            if strict:
+                raise ValidationError(f"Unresolved placeholder: {placeholder}")
+            logger.warning("Could not resolve placeholder %s", placeholder)
+            return ""
         except (KeePassError, ValidationError) as e:
-            print(
-                f"Warning: Failed to resolve placeholder {placeholder}: {e.message}",
-                file=sys.stderr,
-            )
-            new_value = new_value.replace(placeholder, "")
+            if strict:
+                # Re-raise as ValidationError to enforce strict mode
+                raise ValidationError(str(e))
+            logger.warning("Failed to resolve placeholder %s: %s", placeholder, str(e))
+            return ""
 
-    return new_value
+    return PLACEHOLDER_REGEX.sub(_replace, value_template)
 
 
-def _load_and_validate_config() -> configparser.ConfigParser:
+def _load_and_validate_config(config_path: str) -> configparser.ConfigParser:
     """Load and validate the configuration file."""
-    if not os.path.exists(CONFIG_FILENAME):
-        raise ConfigFileNotFoundError(ERROR_CONFIG_FILE_NOT_FOUND)
+    if not os.path.exists(config_path):
+        raise ConfigFileNotFoundError(
+            f"Configuration file '{config_path}' not found."
+        )
 
-    return validate_config_file(CONFIG_FILENAME)
+    return validate_config_file(config_path)
 
 
 def _validate_keepass_config(
@@ -253,20 +259,21 @@ def _open_keepass_database(
 
 
 def _process_environment_variables(
-    config: configparser.ConfigParser, kp: PyKeePass
+    config: configparser.ConfigParser, kp: PyKeePass, *, strict: bool = False
 ) -> List[str]:
     """Process environment variables and return export commands."""
     if ENV_SECTION not in config:
-        print(
-            f"Warning: {ERROR_SECTION_MISSING_NO_VARS.format(section=ENV_SECTION, config_file=CONFIG_FILENAME)}",
-            file=sys.stderr,
+        logging.getLogger(__name__).warning(
+            ERROR_SECTION_MISSING_NO_VARS.format(
+                section=ENV_SECTION, config_file=CONFIG_FILENAME
+            )
         )
-        sys.exit(0)
+        return []
 
     env_config = config[ENV_SECTION]
     exports: List[str] = []
     for var_name, value_template in env_config.items():
-        final_value = substitute_value(kp, value_template)
+        final_value = substitute_value(kp, value_template, strict=strict)
         # Use shlex.quote for safe shell exporting
         exports.append(f"export {var_name.upper()}={shlex.quote(final_value)}")
 
@@ -274,26 +281,54 @@ def _process_environment_variables(
 
 
 def _handle_error(error, exit_code: int) -> None:
-    """Handle errors with appropriate messaging and exit codes."""
+    """Handle errors with appropriate messaging. Let the CLI decide exit codes."""
+    logger = logging.getLogger(__name__)
     error_type = type(error).__name__
-    print(f"{error_type} Error: {error}", file=sys.stderr)
+    logger.error("%s Error: %s", error_type, error)
     if hasattr(error, "original_exception") and error.original_exception:
-        print(f"  Original error: {error.original_exception}", file=sys.stderr)
-    sys.exit(exit_code)
+        logger.error("  Original error: %s", error.original_exception)
+    # Re-raise to let the CLI layer map to exit codes
+    raise error
 
 
 def _create_argument_parser() -> argparse.ArgumentParser:
     """Create and configure the argument parser."""
+    from . import __version__
+
     parser = argparse.ArgumentParser(
         prog="keeenv",
         description="Set local environment variables from KeePass database",
         epilog="Example: eval $(keeenv)",
     )
 
+    verbosity = parser.add_mutually_exclusive_group()
+    verbosity.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Reduce logging output (only errors)",
+    )
+    verbosity.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Increase logging verbosity (debug details)",
+    )
+
+    parser.add_argument(
+        "--config",
+        metavar="PATH",
+        default=CONFIG_FILENAME,
+        help=f"Path to configuration file (default: {CONFIG_FILENAME})",
+    )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Fail if any placeholder cannot be resolved",
+    )
+
     parser.add_argument(
         "--version",
         action="version",
-        version="%(prog)s 0.1.0",
+        version=f"%(prog)s {__version__}",
         help="Show program's version number and exit",
     )
 
@@ -304,14 +339,22 @@ def main() -> None:
     """Main function to read config, fetch secrets, and set the environment."""
     # Parse command line arguments
     parser = _create_argument_parser()
-    parser.parse_args()
+    args = parser.parse_args()
+
+    # Configure logging level based on verbosity flags
+    if getattr(args, "verbose", False):
+        logging.basicConfig(level=logging.DEBUG)
+    elif getattr(args, "quiet", False):
+        logging.basicConfig(level=logging.ERROR)
+    else:
+        logging.basicConfig(level=logging.WARNING)
 
     # If --version or --help was provided, argparse will handle it and exit
     # So we only continue if no special arguments were provided
 
     try:
         # Load and validate configuration
-        config = _load_and_validate_config()
+        config = _load_and_validate_config(args.config)
 
         # Validate Keepass configuration and get paths
         validated_db_path, validated_keyfile_path = _validate_keepass_config(config)
@@ -323,7 +366,7 @@ def main() -> None:
         kp = _open_keepass_database(validated_db_path, password, validated_keyfile_path)
 
         # Process environment variables
-        exports = _process_environment_variables(config, kp)
+        exports = _process_environment_variables(config, kp, strict=bool(getattr(args, "strict", False)))
 
         # Print export commands
         if exports:
@@ -337,9 +380,9 @@ def main() -> None:
         _handle_error(e, 4)
     except SecurityError as e:
         _handle_error(e, 5)
-    except Exception as e:
-        print(f"Unexpected Error: {e}", file=sys.stderr)
-        sys.exit(1)
+    except Exception:
+        # Bubble unexpected errors to the CLI layer as well
+        raise
 
 
 if __name__ == "__main__":
