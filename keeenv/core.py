@@ -189,9 +189,7 @@ def substitute_value(kp: PyKeePass, value_template: str, strict: bool = False) -
 def _load_and_validate_config(config_path: str) -> configparser.ConfigParser:
     """Load and validate the configuration file."""
     if not os.path.exists(config_path):
-        raise ConfigFileNotFoundError(
-            f"Configuration file '{config_path}' not found."
-        )
+        raise ConfigFileNotFoundError(f"Configuration file '{config_path}' not found.")
 
     return validate_config_file(config_path)
 
@@ -366,7 +364,9 @@ def main() -> None:
         kp = _open_keepass_database(validated_db_path, password, validated_keyfile_path)
 
         # Process environment variables
-        exports = _process_environment_variables(config, kp, strict=bool(getattr(args, "strict", False)))
+        exports = _process_environment_variables(
+            config, kp, strict=bool(getattr(args, "strict", False))
+        )
 
         # Print export commands
         if exports:

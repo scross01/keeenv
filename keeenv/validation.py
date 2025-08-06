@@ -212,6 +212,7 @@ class SecurityValidator:
             if db_stat.st_mode & 0o044:
                 # Downgrade to warning (respect --quiet/--verbose)
                 import logging as _logging  # local import to avoid unused at module scope
+
                 _logging.getLogger(__name__).warning(
                     "%s %s", ERROR_DATABASE_WORLD_READABLE, db_path
                 )
@@ -222,6 +223,7 @@ class SecurityValidator:
                     key_stat = os.stat(keyfile_path)
                     if key_stat.st_mode & 0o044:
                         import logging as _logging  # local import to avoid unused at module scope
+
                         _logging.getLogger(__name__).warning(
                             "%s %s", ERROR_KEYFILE_WORLD_READABLE, keyfile_path
                         )

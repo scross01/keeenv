@@ -132,4 +132,3 @@ def test_non_strict_blanks_unresolved_placeholders(tmp_path: Path):
     )
     proc = run_cli(["--config", str(cfg)])
     assert proc.returncode == 1
-    
