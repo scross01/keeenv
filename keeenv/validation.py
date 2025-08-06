@@ -30,8 +30,12 @@ ERROR_TITLE_TOO_LONG = f"Entry title too long (max {MAX_TITLE_LENGTH} characters
 ERROR_TITLE_INVALID_CHARS = "Entry title contains invalid characters"
 ERROR_PATH_INVALID_FORMAT = "Invalid path format"
 ERROR_ATTR_INVALID_NAME = "Invalid attribute name"
-ERROR_KEYFILE_WORLD_READABLE = "Keyfile is world-readable. Please restrict permissions to owner only."
-ERROR_DATABASE_WORLD_READABLE = "Database file is world-readable. Please restrict permissions to owner only."
+ERROR_KEYFILE_WORLD_READABLE = (
+    "Keyfile is world-readable. Please restrict permissions to owner only."
+)
+ERROR_DATABASE_WORLD_READABLE = (
+    "Database file is world-readable. Please restrict permissions to owner only."
+)
 ERROR_PATH_MUST_BE_STRING = "Path must be a non-empty string"
 ERROR_TITLE_MUST_BE_STRING = "Entry title must be a non-empty string"
 ERROR_ATTR_MUST_BE_STRING = "Attribute must be a non-empty string"
@@ -44,25 +48,29 @@ ERROR_CANNOT_ACCESS_KEYFILE = "Cannot access keyfile: {error}"
 
 class BaseValidator:
     """Base class for validators with common validation logic."""
-    
+
     @staticmethod
     def validate_non_empty_string(value: Optional[str], field_name: str) -> str:
         """Validate that a value is a non-empty string."""
         if not value or not isinstance(value, str):
             raise ValidationError(f"{field_name} must be a non-empty string")
         return value
-    
+
     @staticmethod
     def validate_string_length(value: str, max_length: int, field_name: str) -> str:
         """Validate that a string does not exceed maximum length."""
         if len(value) > max_length:
-            raise ValidationError(f"{field_name} too long (max {max_length} characters)")
+            raise ValidationError(
+                f"{field_name} too long (max {max_length} characters)"
+            )
         return value
-    
+
     @staticmethod
     def validate_ascii_chars(value: str, field_name: str) -> str:
         """Validate that a string contains only ASCII printable characters."""
-        if any(ord(char) < MIN_ASCII_VALUE or ord(char) > MAX_ASCII_VALUE for char in value):
+        if any(
+            ord(char) < MIN_ASCII_VALUE or ord(char) > MAX_ASCII_VALUE for char in value
+        ):
             raise ValidationError(f"{field_name} contains invalid characters")
         return value
 
@@ -125,14 +133,16 @@ class EntryValidator(BaseValidator):
         """
         # Validate basic string requirements
         validated_title = BaseValidator.validate_non_empty_string(title, "Entry title")
-        
+
         # Validate length
         validated_title = BaseValidator.validate_string_length(
             validated_title, MAX_TITLE_LENGTH, "Entry title"
         )
-        
+
         # Validate character set
-        validated_title = BaseValidator.validate_ascii_chars(validated_title, "Entry title")
+        validated_title = BaseValidator.validate_ascii_chars(
+            validated_title, "Entry title"
+        )
 
         return validated_title.strip()
 
@@ -168,7 +178,9 @@ class AttributeValidator(BaseValidator):
 
         # Validate custom property names
         if not re.match(CUSTOM_PROPERTY_PATTERN, validated_attr):
-            raise AttributeValidationError(f"{ERROR_ATTR_INVALID_NAME}: {validated_attr}")
+            raise AttributeValidationError(
+                f"{ERROR_ATTR_INVALID_NAME}: {validated_attr}"
+            )
 
         return validated_attr
 
@@ -198,9 +210,7 @@ class SecurityValidator:
 
         # Check if database is world-readable
         if db_stat.st_mode & 0o044:
-            raise DatabaseSecurityError(
-                f"{ERROR_DATABASE_WORLD_READABLE} {db_path}"
-            )
+            raise DatabaseSecurityError(f"{ERROR_DATABASE_WORLD_READABLE} {db_path}")
 
         # Check keyfile permissions if present
         if keyfile_path:
@@ -209,7 +219,7 @@ class SecurityValidator:
                 if key_stat.st_mode & 0o044:
                     print(
                         f"Warning: {ERROR_KEYFILE_WORLD_READABLE} {keyfile_path}",
-                        file=sys.stderr
+                        file=sys.stderr,
                     )
             except OSError as e:
                 raise KeyfileSecurityError(ERROR_CANNOT_ACCESS_KEYFILE.format(error=e))

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # keeenv.py - A script to export environment variables from a KeePass database
 
+import argparse
 import configparser
 import getpass
 import os
@@ -46,7 +47,9 @@ ERROR_KEY_MISSING = "'{key}' key missing in '[{section}]' section"
 ERROR_COULD_NOT_READ_PASSWORD = "Could not read password"
 ERROR_INVALID_PASSWORD_OR_KEYFILE = "Invalid master password or key file"
 ERROR_DATABASE_OPEN_FAILED = "Failed to open KeePass database"
-ERROR_SECTION_MISSING_NO_VARS = "Section '[{section}]' missing in '{config_file}'. No variables to process."
+ERROR_SECTION_MISSING_NO_VARS = (
+    "Section '[{section}]' missing in '{config_file}'. No variables to process."
+)
 
 
 def validate_config_file(config_path: str) -> configparser.ConfigParser:
@@ -103,10 +106,15 @@ def _get_custom_attribute(entry, attribute: str) -> Optional[str]:
     """Get custom attribute from KeePass entry."""
     if (
         hasattr(entry, "custom_properties")
-        and isinstance(entry.custom_properties, dict)  # pyright: ignore[reportAttributeAccessIssue]
-        and attribute in entry.custom_properties  # pyright: ignore[reportAttributeAccessIssue]
+        and isinstance(
+            entry.custom_properties, dict
+        )  # pyright: ignore[reportAttributeAccessIssue]
+        and attribute
+        in entry.custom_properties  # pyright: ignore[reportAttributeAccessIssue]
     ):
-        return entry.custom_properties[attribute]  # pyright: ignore[reportAttributeAccessIssue]
+        return entry.custom_properties[
+            attribute
+        ]  # pyright: ignore[reportAttributeAccessIssue]
     return None
 
 
@@ -119,7 +127,9 @@ def get_keepass_secret(kp: PyKeePass, title: str, attribute: str) -> Optional[st
 
         entry = kp.find_entries(title=validated_title, first=True)
         if not entry:
-            raise KeePassEntryNotFoundError(f"Entry with title '{validated_title}' not found")
+            raise KeePassEntryNotFoundError(
+                f"Entry with title '{validated_title}' not found"
+            )
 
         # Try standard attributes first
         standard_value = _get_standard_attribute(entry, validated_attr)
@@ -176,15 +186,19 @@ def _load_and_validate_config() -> configparser.ConfigParser:
     """Load and validate the configuration file."""
     if not os.path.exists(CONFIG_FILENAME):
         raise ConfigFileNotFoundError(ERROR_CONFIG_FILE_NOT_FOUND)
-    
+
     return validate_config_file(CONFIG_FILENAME)
 
 
-def _validate_keepass_config(config: configparser.ConfigParser) -> tuple[str, Optional[str]]:
+def _validate_keepass_config(
+    config: configparser.ConfigParser,
+) -> tuple[str, Optional[str]]:
     """Validate Keepass configuration and return validated paths."""
     if KEEPASS_SECTION not in config:
         raise ConfigSectionMissingError(
-            ERROR_SECTION_MISSING.format(section=KEEPASS_SECTION, config_file=CONFIG_FILENAME)
+            ERROR_SECTION_MISSING.format(
+                section=KEEPASS_SECTION, config_file=CONFIG_FILENAME
+            )
         )
 
     keepass_config = config[KEEPASS_SECTION]
@@ -197,12 +211,16 @@ def _validate_keepass_config(config: configparser.ConfigParser) -> tuple[str, Op
         )
 
     # Validate database path
-    validated_db_path = str(PathValidator.validate_file_path(os.path.expanduser(db_path)))
+    validated_db_path = str(
+        PathValidator.validate_file_path(os.path.expanduser(db_path))
+    )
 
     # Validate keyfile path if present
     validated_keyfile_path = None
     if keyfile_path:
-        validated_keyfile_path = str(PathValidator.validate_file_path(os.path.expanduser(keyfile_path)))
+        validated_keyfile_path = str(
+            PathValidator.validate_file_path(os.path.expanduser(keyfile_path))
+        )
 
     # Validate file security
     SecurityValidator.validate_database_security(
@@ -222,7 +240,9 @@ def _get_master_password(db_path: str) -> str:
         raise KeePassCredentialsError(ERROR_COULD_NOT_READ_PASSWORD)
 
 
-def _open_keepass_database(db_path: str, password: str, keyfile_path: Optional[str]) -> PyKeePass:
+def _open_keepass_database(
+    db_path: str, password: str, keyfile_path: Optional[str]
+) -> PyKeePass:
     """Open and return the KeePass database."""
     try:
         return PyKeePass(db_path, password=password, keyfile=keyfile_path)
@@ -232,7 +252,9 @@ def _open_keepass_database(db_path: str, password: str, keyfile_path: Optional[s
         raise KeePassError(f"{ERROR_DATABASE_OPEN_FAILED}: {e}")
 
 
-def _process_environment_variables(config: configparser.ConfigParser, kp: PyKeePass) -> List[str]:
+def _process_environment_variables(
+    config: configparser.ConfigParser, kp: PyKeePass
+) -> List[str]:
     """Process environment variables and return export commands."""
     if ENV_SECTION not in config:
         print(
@@ -255,13 +277,38 @@ def _handle_error(error, exit_code: int) -> None:
     """Handle errors with appropriate messaging and exit codes."""
     error_type = type(error).__name__
     print(f"{error_type} Error: {error}", file=sys.stderr)
-    if hasattr(error, 'original_exception') and error.original_exception:
+    if hasattr(error, "original_exception") and error.original_exception:
         print(f"  Original error: {error.original_exception}", file=sys.stderr)
     sys.exit(exit_code)
 
 
+def _create_argument_parser() -> argparse.ArgumentParser:
+    """Create and configure the argument parser."""
+    parser = argparse.ArgumentParser(
+        prog="keeenv",
+        description="Set local environment variables from KeePass database",
+        epilog="Example: eval $(keeenv)",
+    )
+
+    parser.add_argument(
+        "--version",
+        action="version",
+        version="%(prog)s 0.1.0",
+        help="Show program's version number and exit",
+    )
+
+    return parser
+
+
 def main() -> None:
     """Main function to read config, fetch secrets, and set the environment."""
+    # Parse command line arguments
+    parser = _create_argument_parser()
+    parser.parse_args()
+
+    # If --version or --help was provided, argparse will handle it and exit
+    # So we only continue if no special arguments were provided
+
     try:
         # Load and validate configuration
         config = _load_and_validate_config()
