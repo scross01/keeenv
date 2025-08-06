@@ -1,30 +1,37 @@
-# keeenv - Populate environment variables from Keepass
+# keeenv - Populate environment variables from KeePass
 
 `keeenv` is a command line tool similar in principle to dotenv to populate environment variables from a local configuration file, but works with an encrypted Keepass database to dynamically fetch sensitive data rather than manually placing passwords and api keys in plain text on the local file system.
 
 ## Installation
 
-```bash
+Dynamically fetch and run with `uvx`
+
+```shell
 uvx https://github.com/scross01/keeenv.git
 ```
 
+Install locally with `uv`
+
 ```shell
 uv tool install https://github.com/scross01/keeenv.git
+keeenv
 ```
 
-For development:
+For development, clone the repository:
 
-```bash
+```shell
 git clone https://github.com/scross01/keeenv.git
 cd keeenv
 uv sync
+source .venv/bin/activate
+keeenv
 ```
 
 ## Usage
 
 Create a `.keeenv` file in your project directory:
 
-```toml
+```ini
 [keepass]
 database = secrets.kdbx
 keyfile = mykey.key
@@ -40,98 +47,25 @@ SECRET_API_KEY = ${"My Secret"."API Key"}
 
 The CLI supports the following options:
 
-- `--version`
-  Show program version and exit.
+`--version`: Show program version and exit.
 
-- `--quiet`
-  Reduce logging output (only errors).
+`--quiet`: Reduce logging output (only errors).
 
-- `--verbose`
-  Increase logging verbosity (debug details).
+`--verbose`: Increase logging verbosity (debug details).
 
-- `--config PATH`
-  Path to configuration file. Defaults to `.keeenv` in the current directory.
+`--config PATH`: Path to configuration file. Defaults to `.keeenv` in the current directory.
 
-- `--strict`
-  Fail if any placeholder cannot be resolved.
+`--strict`: Fail if any placeholder cannot be resolved.
 
 ### Configuration Options
 
 The `[keepass]` section configures the Keepass database to use:
 
 - `database` - (required) full or relative path to the Keepass database file
+
 - `keyfile` - (optional) full or relative path to the Keepass database key file
 
-The `[env]` section sets the environment variables using `${}` to enclose substitutions from Keepass in the format of `"Entry Title".Attribute`, e.g. `"My Account".Password`
-
-### Behavior and logging
-
-- The tool prints shell-safe `export` commands to stdout to be consumed by your shell (e.g., using `eval "$(keeenv)"`).
-- Logging goes to stderr using Python’s logging module and is controlled by `--quiet`/`--verbose`. Default level is WARNING.
-
-### Examples
-
-Basic usage:
-```bash
-eval "$(keeenv)"
-```
-
-Custom config path:
-```bash
-eval "$(keeenv --config ./config/.keeenv)"
-```
-
-Strict mode:
-```bash
-eval "$(keeenv --strict)"
-```
-
-Increase verbosity:
-```bash
-eval "$(keeenv --verbose)"
-```
-
-Quiet mode:
-```bash
-eval "$(keeenv --quiet)"
-```
-
-Combine options:
-```bash
-eval "$(keeenv --config ./secrets/.keeenv --strict --verbose)"
-```
-
-### Validation Rules
-
-keeenv includes comprehensive input validation to ensure security and reliability:
-
-#### Path Validation
-
-- Database and keyfile paths must be valid and exist
-- Directory traversal attempts (`..`) are blocked
-- Path expansion (`~`) is supported
-- Files must have proper permissions (not world-readable)
-
-#### Entry Title Validation
-
-- Entry titles must be 1-255 characters long
-- Only printable ASCII characters are allowed
-- Leading/trailing whitespace is trimmed
-
-#### Attribute Validation
-
-- Standard attributes: `username`, `password`, `url`, `notes`
-- Custom attributes are supported with quoted names
-- Attribute names must start with a letter or underscore
-- Only alphanumeric characters, spaces, and underscores are allowed
-
-#### Security Validation
-
-- Database files cannot be world-readable
-- Keyfiles cannot be world-readable
-- File permissions are checked before access
-
-### Supported Attributes
+The `[env]` section sets the environment variables using `${}` to enclose substitutions from Keepass in the format of `"Entry Title".Attribute`, e.g. `"My Account".Password`.
 
 Standard attributes include:
 
@@ -140,19 +74,39 @@ Standard attributes include:
 - `URL`
 - `Notes`
 
-Custom attributes are also supported. If the name contains spaces or special characters, use quotes:
+Custom attributes are also supported. Use quotes around the attribute name if it contains spaces or special characters. Attribute names must start with a letter or underscore. Only alphanumeric characters, spaces, and underscores are allowed. For example:
 
-```toml
+```ini
 CUSTOM_KEY = ${"My Secret"."API Key"}
-DATABASE_URL = ${"Production Database".Connection String}
+DATABASE_URL = ${"Production Database"."Connection String"}
 ```
 
-## Exit codes
+### Behavior and logging
 
-- `0` on success
-- `1` on any failure (configuration errors, validation errors, KeePass access issues, or unexpected exceptions)
+The tool prints shell-safe `export` commands to stdout to be consumed by your shell (e.g., using `eval "$(keeenv)"`).
 
-This single nonzero exit code policy is implemented in the CLI wrapper (see [keeenv/main.py](keeenv/main.py:9-26)).
+Logging goes to stderr and can be controlled by `--quiet`/`--verbose`.
+
+### Examples
+
+Basic usage:
+
+```shell
+eval "$(keeenv)"
+```
+
+Custom config path:
+
+```shell
+eval "$(keeenv --config ./config/.keeenv)"
+```
+
+Combine options:
+
+```shell
+eval "$(keeenv --config ./secrets/.keeenv --strict --verbose)"
+```
+
 
 ## Why keeenv? The challenges with .env files
 
@@ -200,17 +154,17 @@ Note: setting additional attributes using keepassxc-cli is not currently support
 
 ### Security Best Practices
 
-1. **File Permissions**: Ensure your KeePass database and keyfiles have restrictive permissions:
+**File Permissions**: Ensure your KeePass database and keyfiles have restrictive permissions:
 
-   ```bash
-   chmod 600 secrets.kdbx
-   chmod 600 mykey.key
-   ```
+  ```shell
+  chmod 600 secrets.kdbx
+  chmod 600 mykey.key
+  ```
 
-2. **Entry Names**: Use descriptive, unique entry names to avoid confusion
+**Entry Names**: Use descriptive, unique entry names to avoid confusion.
 
-3. **Attribute Names**: Use consistent naming for custom attributes
+**Attribute Names**: Use consistent naming for custom attributes. Attribute names must start with a letter or underscore and only alphanumeric characters, spaces, and underscores are allowed.
 
-4. **Environment Variables**: Use uppercase names for environment variables by convention
+**Environment Variables**: Use uppercase names for environment variables by convention.
 
-5. **Configuration Location**: Keep your `.keeenv` file in your project root
+**Configuration Location**: Keep your `.keeenv` file in your project root.
