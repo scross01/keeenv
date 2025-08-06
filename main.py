@@ -1,6 +1,4 @@
-def main():
-    print("Hello from keeenv!")
-
+from keeenv import main
 
 if __name__ == "__main__":
     main()

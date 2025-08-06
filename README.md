@@ -1,35 +1,121 @@
 # keeenv - Populate environment variables from Keepass
 
-`keeenv` is is a command line tool similar in principle to dotenv to populate environment variables from a local configuraiton file, but works with an encrypted Keepass database to dynamically fetch sensitive data rather than manually placing passwords and api keys in plain text on the local file system.
+`keeenv` is a command line tool similar in principle to dotenv to populate environment variables from a local configuration file, but works with an encrypted Keepass database to dynamically fetch sensitive data rather than manually placing passwords and api keys in plain text on the local file system.
+
+## Installation
+
+```bash
+pip install keeenv
+```
+
+For development:
+
+```bash
+git clone https://github.com/yourusername/keeenv.git
+cd keeenv
+pip install -e .
+```
 
 ## Usage
 
-Create a `.keeenv` file
+Create a `.keeenv` file in your project directory:
 
 ```toml
 [keepass]
-database=secrets.kdbx
+database = secrets.kdbx
+keyfile = mykey.key
 
 [env]
-SECRET_USERNAME=${"My Secret".Username}
-SECRET_PASSWORD=${"My Secret".Password}
-SECRET_URL=${"My Secret".URL}
-SECRET_API_KEY=${"My Secret"."API Key"}
+SECRET_USERNAME = ${"My Secret".Username}
+SECRET_PASSWORD = ${"My Secret".Password}
+SECRET_URL = ${"My Secret".URL}
+SECRET_API_KEY = ${"My Secret"."API Key"}
 ```
 
-The `[keepass]` section configures the Keepass database to use
+### Configuration Options
 
-`database` - (required) full or releative path to the Keepass database file
-`keyfile` - (optional) full or releative path to the Keepass database key file
+The `[keepass]` section configures the Keepass database to use:
 
-the `[env]` section sets the environment variables using ${} to enclose subtitutions from Keepass in the format of "Entry Title".Attribute, e.g. "My Account".Password
+- `database` - (required) full or relative path to the Keepass database file
+- `keyfile` - (optional) full or relative path to the Keepass database key file
 
-Supported attributes include:
+The `[env]` section sets the environment variables using `${}` to enclose substitutions from Keepass in the format of `"Entry Title".Attribute`, e.g. `"My Account".Password`
+
+### Validation Rules
+
+keeenv includes comprehensive input validation to ensure security and reliability:
+
+#### Path Validation
+
+- Database and keyfile paths must be valid and exist
+- Directory traversal attempts (`..`) are blocked
+- Path expansion (`~`) is supported
+- Files must have proper permissions (not world-readable)
+
+#### Entry Title Validation
+
+- Entry titles must be 1-255 characters long
+- Only printable ASCII characters are allowed
+- Leading/trailing whitespace is trimmed
+
+#### Attribute Validation
+
+- Standard attributes: `username`, `password`, `url`, `notes`
+- Custom attributes are supported with quoted names
+- Attribute names must start with a letter or underscore
+- Only alphanumeric characters, spaces, and underscores are allowed
+
+#### Security Validation
+
+- Database files cannot be world-readable
+- Keyfiles cannot be world-readable
+- File permissions are checked before access
+
+### Supported Attributes
+
+Standard attributes include:
 
 - `Username`
 - `Password`
 - `URL`
-- Any additional attributes. If the name contains spaces use quotes e.g. `${"My Secret"."API Key"}`
+- `Notes`
+
+Custom attributes are also supported. If the name contains spaces or special characters, use quotes:
+
+```toml
+CUSTOM_KEY = ${"My Secret"."API Key"}
+DATABASE_URL = ${"Production Database".Connection String}
+```
+
+## Error Handling
+
+keeenv provides detailed error messages to help diagnose issues:
+
+### Configuration Errors
+
+- `Configuration validation failed` - Invalid `.keeenv` file format
+- `Missing required [keepass] section` - Missing database configuration
+- `Missing required 'database' key` - No database path specified
+- `Failed to parse config file` - TOML syntax errors
+
+### Path Validation Errors
+
+- `Path must be a non-empty string` - Empty or invalid path
+- `Invalid path format` - Directory traversal attempts
+- `File not found` - Database or keyfile doesn't exist
+- `Path is not a file` - Directory specified instead of file
+
+### KeePass Errors
+
+- `Entry with title 'X' not found` - Invalid entry name
+- `Attribute 'X' not found` - Invalid attribute name
+- `Invalid master password or key file` - Authentication failure
+- `Failed to access entry 'X'` - Database access errors
+
+### Security Errors
+
+- `Database file X is world-readable` - Insecure file permissions
+- `Keyfile X is world-readable` - Insecure keyfile permissions
 
 ## Why keeenv? The challenges with .env files
 
@@ -73,4 +159,21 @@ Enter password for new entry: ********
 Successfully added entry My Secret.
 ```
 
-Note: setting attitional attributes using keepassxc-cli is not currently supported.
+Note: setting additional attributes using keepassxc-cli is not currently supported.
+
+### Security Best Practices
+
+1. **File Permissions**: Ensure your KeePass database and keyfiles have restrictive permissions:
+
+   ```bash
+   chmod 600 secrets.kdbx
+   chmod 600 mykey.key
+   ```
+
+2. **Entry Names**: Use descriptive, unique entry names to avoid confusion
+
+3. **Attribute Names**: Use consistent naming for custom attributes
+
+4. **Environment Variables**: Use uppercase names for environment variables by convention
+
+5. **Configuration Location**: Keep your `.keeenv` file in your project root and add it to `.gitignore`

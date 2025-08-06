@@ -8,8 +8,16 @@ dependencies = [
     "pykeepass>=4.1.1.post1",
 ]
 
+[project.scripts]
+keeenv = "keeenv.main:main"
+
 [dependency-groups]
 dev = [
     "black>=25.1.0",
     "flake8>=7.3.0",
+    "pytest>=8.0.0",
 ]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

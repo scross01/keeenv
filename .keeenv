@@ -1,8 +1,9 @@
 [keepass]
 database=secrets.kdbx
+keyfile=LICENSE
 
 [env]
-SECRET_USERNAME=${"My Secret".Username}
-SECRET_PASSWORD=${"My Secret".Password}
-SECRET_URL=${"My Secret".URL}
-SECRET_API_KEY=${"My Secret"."API Key"}
+SECRET_USERNAME = ${"My Secret".Username}
+SECRET_PASSWORD = ${"My Secret".Password}
+SECRET_URL = ${"My Secret".URL}
+SECRET_API_KEY = ${"My Secret"."API Key"}
