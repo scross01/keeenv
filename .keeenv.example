@@ -1,5 +1,6 @@
 [keepass]
 database=secrets.kdbx
+keyfile=/path/to/key/keyfile
 
 [env]
 SECRET_USERNAME = ${"My Secret".Username}

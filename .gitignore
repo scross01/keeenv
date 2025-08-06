@@ -14,5 +14,6 @@ wheels/
 .env
 .python-version
 uv.lock
-
+.keeenv
+.coverage
 

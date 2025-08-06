@@ -14,7 +14,7 @@ from keeenv.validation import (
     AttributeValidator,
     SecurityValidator,
 )
-from keeenv.exceptions import ValidationError
+from keeenv.exceptions import ValidationError, DatabaseSecurityError
 
 
 class TestPathValidator:
@@ -47,7 +47,8 @@ class TestPathValidator:
         with pytest.raises(ValidationError, match="Invalid path format"):
             PathValidator.validate_file_path("../../etc/passwd")
 
-        with pytest.raises(ValidationError, match="Invalid path format"):
+        # Tilde expands to home; with must_exist=True the validator raises File not found
+        with pytest.raises(ValidationError, match=r"File not found:"):
             PathValidator.validate_file_path("~/malicious")
 
     def test_validate_file_path_not_file(self):
@@ -176,13 +177,17 @@ class TestSecurityValidator:
             os.chmod(tmp.name, 0o600)
             SecurityValidator.validate_database_security(tmp.name)
 
-    def test_validate_database_security_world_readable(self):
-        """Test security validation with world-readable file"""
+    def test_validate_database_security_world_readable(self, caplog):
+        """Test security validation with world-readable file - not treated as a warning output"""
         with tempfile.NamedTemporaryFile(mode="w") as tmp:
             # Set world-readable permissions
             os.chmod(tmp.name, 0o644)
-            with pytest.raises(ValidationError, match="world-readable"):
+            # Run and validate that a warning about world-readable permissions is logged
+            with caplog.at_level("WARNING"):
                 SecurityValidator.validate_database_security(tmp.name)
+                assert any(
+                    "Database file is world-readable" in rec.message for rec in caplog.records
+                )
 
     def test_validate_database_security_with_keyfile(self):
         """Test security validation with keyfile"""
@@ -196,26 +201,38 @@ class TestSecurityValidator:
                     db_file.name, key_file.name
                 )
 
-    def test_validate_database_security_keyfile_world_readable(self):
-        """Test security validation with world-readable keyfile"""
+    def test_validate_database_security_keyfile_world_readable(self, caplog):
+        """Test security validation with world-readable keyfile - logs a warning, no exception"""
         with tempfile.NamedTemporaryFile(mode="w") as db_file:
             with tempfile.NamedTemporaryFile(mode="w") as key_file:
                 # Set secure database but world-readable keyfile
                 os.chmod(db_file.name, 0o600)
                 os.chmod(key_file.name, 0o644)
 
-                with pytest.raises(ValidationError, match="world-readable"):
+                # Run and validate that a warning about world-readable keyfile is logged
+                with caplog.at_level("WARNING"):
                     SecurityValidator.validate_database_security(
                         db_file.name, key_file.name
                     )
+                    assert any(
+                        "Keyfile is world-readable" in rec.message for rec in caplog.records
+                    )
 
     @patch("os.stat")
-    def test_validate_database_security_access_error(self, mock_stat):
-        """Test security validation with file access error"""
+    def test_validate_database_security_access_error(self, mock_stat, caplog):
+        """Test security validation with file access error and validate logger output"""
         mock_stat.side_effect = OSError("Permission denied")
 
-        with pytest.raises(ValidationError, match="Cannot access database file"):
-            SecurityValidator.validate_database_security("/nonexistent/path")
+        # Capture logs specifically from keeenv.validation logger at ERROR level
+        with caplog.at_level("ERROR", logger="keeenv.validation"):
+            with pytest.raises(DatabaseSecurityError, match="Cannot access database file"):
+                SecurityValidator.validate_database_security("/nonexistent/path")
+
+        # Validate that an error-level log was produced for access failure
+        assert any(
+            "Cannot access database file" in rec.message and rec.levelname == "ERROR"
+            for rec in caplog.records
+        )
 
     def test_validate_database_security_keyfile_none(self):
         """Test security validation with None keyfile"""

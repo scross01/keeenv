@@ -204,6 +204,11 @@ class SecurityValidator:
         try:
             db_stat = os.stat(db_path)
         except OSError as e:
+            # Log an error before raising to satisfy tests expecting ERROR-level log
+            import logging as _logging  # local import to avoid unused at module scope
+            _logging.getLogger(__name__).error(
+                "%s %s", ERROR_CANNOT_ACCESS_DB.format(error=e), db_path
+            )
             raise DatabaseSecurityError(ERROR_CANNOT_ACCESS_DB.format(error=e))
 
         # Only perform POSIX permission checks on POSIX systems
@@ -228,6 +233,10 @@ class SecurityValidator:
                             "%s %s", ERROR_KEYFILE_WORLD_READABLE, keyfile_path
                         )
                 except OSError as e:
+                    import logging as _logging  # local import to avoid unused at module scope
+                    _logging.getLogger(__name__).error(
+                        "%s %s", ERROR_CANNOT_ACCESS_KEYFILE.format(error=e), keyfile_path
+                    )
                     raise KeyfileSecurityError(
                         ERROR_CANNOT_ACCESS_KEYFILE.format(error=e)
                     )
@@ -238,6 +247,10 @@ class SecurityValidator:
                     # Still attempt to access keyfile to surface access errors
                     os.stat(keyfile_path)
                 except OSError as e:
+                    import logging as _logging  # local import to avoid unused at module scope
+                    _logging.getLogger(__name__).error(
+                        "%s %s", ERROR_CANNOT_ACCESS_KEYFILE.format(error=e), keyfile_path
+                    )
                     raise KeyfileSecurityError(
                         ERROR_CANNOT_ACCESS_KEYFILE.format(error=e)
                     )
