@@ -7,3 +7,9 @@ requires-python = ">=3.11"
 dependencies = [
     "pykeepass>=4.1.1.post1",
 ]
+
+[dependency-groups]
+dev = [
+    "black>=25.1.0",
+    "flake8>=7.3.0",
+]

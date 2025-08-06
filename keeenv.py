@@ -15,7 +15,9 @@ KEEPASS_SECTION = "keepass"
 ENV_SECTION = "env"
 
 # Regex to find placeholders like ${"Entry Title".Attribute} or ${"Entry Title"."API Key"}
-PLACEHOLDER_REGEX = re.compile(r'\$\{\s*\"([^\"]+)\"\s*\.\s*(?:\"([^\"]*)\"|(\w+))\s*\}')
+PLACEHOLDER_REGEX = re.compile(
+    r"\$\{\s*\"([^\"]+)\"\s*\.\s*(?:\"([^\"]*)\"|(\w+))\s*\}"
+)
 
 
 def get_keepass_secret(kp, title, attribute):
@@ -24,19 +26,22 @@ def get_keepass_secret(kp, title, attribute):
         entry = kp.find_entries(title=title, first=True)
         if entry:
             # Common attributes
-            if attribute.lower() == 'password':
+            if attribute.lower() == "password":
                 return entry.password
-            elif attribute.lower() == 'username':
+            elif attribute.lower() == "username":
                 return entry.username
-            elif attribute.lower() == 'url':
+            elif attribute.lower() == "url":
                 return entry.url
-            elif attribute.lower() == 'notes':
+            elif attribute.lower() == "notes":
                 return entry.notes
             # Custom string fields
             elif attribute in entry.custom_properties:
                 return entry.custom_properties[attribute]
             else:
-                print(f"Warning: Attribute '{attribute}' not found for entry '{title}'.", file=sys.stderr)
+                print(
+                    f"Warning: Attribute '{attribute}' not found for entry '{title}'.",
+                    file=sys.stderr,
+                )
                 return None
         else:
             print(f"Warning: Entry with title '{title}' not found.", file=sys.stderr)
@@ -60,7 +65,9 @@ def substitute_value(kp, value_template):
             new_value = new_value.replace(placeholder, secret)
         else:
             # Set to blank if secret retrieval failed
-            print(f"Warning: Could not resolve placeholder {placeholder}", file=sys.stderr)
+            print(
+                f"Warning: Could not resolve placeholder {placeholder}", file=sys.stderr
+            )
             new_value = new_value.replace(placeholder, "")
 
     return new_value
@@ -69,27 +76,38 @@ def substitute_value(kp, value_template):
 def main():
     """Main function to read config, fetch secrets, and set the environment."""
     if not os.path.exists(CONFIG_FILENAME):
-        print(f"Error: Configuration file '{CONFIG_FILENAME}' not found.", file=sys.stderr)
+        print(
+            f"Error: Configuration file '{CONFIG_FILENAME}' not found.", file=sys.stderr
+        )
         sys.exit(1)
 
     config = configparser.ConfigParser()
     try:
         config.read(CONFIG_FILENAME)
     except configparser.Error as e:
-        print(f"Error parsing configuration file '{CONFIG_FILENAME}': {e}", file=sys.stderr)
+        print(
+            f"Error parsing configuration file '{CONFIG_FILENAME}': {e}",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     # --- Keepass Configuration ---
     if KEEPASS_SECTION not in config:
-        print(f"Error: Section '[{KEEPASS_SECTION}]' missing in '{CONFIG_FILENAME}'.", file=sys.stderr)
+        print(
+            f"Error: Section '[{KEEPASS_SECTION}]' missing in '{CONFIG_FILENAME}'.",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     keepass_config = config[KEEPASS_SECTION]
-    db_path = keepass_config.get('database')
-    keyfile_path = keepass_config.get('keyfile')
+    db_path = keepass_config.get("database")
+    keyfile_path = keepass_config.get("keyfile")
 
     if not db_path:
-        print(f"Error: 'database' key missing in '[{KEEPASS_SECTION}]' section.", file=sys.stderr)
+        print(
+            f"Error: 'database' key missing in '[{KEEPASS_SECTION}]' section.",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     db_path = os.path.expanduser(db_path)  # Expand ~ in path
@@ -106,7 +124,9 @@ def main():
 
     # --- Get Master Password ---
     try:
-        password = getpass.getpass(f"Enter master password for {os.path.basename(db_path)}: ")
+        password = getpass.getpass(
+            f"Enter master password for {os.path.basename(db_path)}: "
+        )
     except EOFError:
         print("\nError: Could not read password.", file=sys.stderr)
         sys.exit(1)
