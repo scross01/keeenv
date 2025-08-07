@@ -45,7 +45,7 @@ PLACEHOLDER_REGEX = re.compile(
 )
 
 # Constants for error messages
-ERROR_CONFIG_FILE_NOT_FOUND = f"Configuration file '{CONFIG_FILENAME}' not found."
+ERROR_CONFIG_FILE_NOT_FOUND = "Configuration file '{config_path}' not found."
 ERROR_SECTION_MISSING = "Section '[{section}]' missing in '{config_file}'"
 ERROR_KEY_MISSING = "'{key}' key missing in '[{section}]' section"
 ERROR_COULD_NOT_READ_PASSWORD = "Could not read password"
@@ -285,8 +285,9 @@ def substitute_value(kp: PyKeePass, value_template: str, strict: bool = False) -
 def _load_and_validate_config(config_path: str) -> configparser.ConfigParser:
     """Load and validate the configuration file."""
     if not os.path.exists(config_path):
-        raise ConfigFileNotFoundError(f"Configuration file '{config_path}' not found.")
-
+        raise ConfigFileNotFoundError(
+            ERROR_CONFIG_FILE_NOT_FOUND.format(config_path=config_path)
+        )
     return validate_config_file(config_path)
 
 
