@@ -155,6 +155,7 @@ class AttributeValidator(BaseValidator):
     @staticmethod
     def _get_supported_attributes() -> set[str]:
         from .core import STANDARD_ATTRS  # late import to avoid circular dependency
+
         return STANDARD_ATTRS
 
     @staticmethod
@@ -237,7 +238,9 @@ class SecurityValidator:
                 try:
                     key_stat = os.stat(keyfile_path)
                     if key_stat.st_mode & 0o044:
-                        logger.warning("%s %s", ERROR_KEYFILE_WORLD_READABLE, keyfile_path)
+                        logger.warning(
+                            "%s %s", ERROR_KEYFILE_WORLD_READABLE, keyfile_path
+                        )
                 except OSError as e:
                     logger.error(
                         "%s %s",

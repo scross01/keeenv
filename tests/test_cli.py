@@ -231,9 +231,7 @@ def test_add_prompts_for_secret_and_preserves_env_case(tmp_path: Path, monkeypat
     kdbx = tmp_path / "secrets.kdbx"
     kdbx.write_text("dummy")
     cfg_path = tmp_path / ".keeenv"
-    cfg_path.write_text(
-        f"[keepass]\ndatabase = {kdbx}\n\n[env]\n", encoding="utf-8"
-    )
+    cfg_path.write_text(f"[keepass]\ndatabase = {kdbx}\n\n[env]\n", encoding="utf-8")
     # Simulate master password prompt and secret prompt via stdin
     # run_cli supports input_text sent to the process. We need two lines: master password then secret.
     input_text = "masterpass\nsupersecret\n"
@@ -270,7 +268,7 @@ def test_add_existing_mapping_prompts_without_force(tmp_path: Path):
         f"[keepass]\n"
         f"database = {kdbx}\n\n"
         "[env]\n"
-        "EXISTING = ${\"Title\".Password}\n",
+        'EXISTING = ${"Title".Password}\n',
         encoding="utf-8",
     )
     # Provide stdin only for master password; then default N on overwrite prompt
@@ -294,9 +292,7 @@ def test_add_with_all_options_builds_placeholder_format(tmp_path: Path):
     # Validate placeholder formatting path without touching DB by pointing to missing DB to fail early after parse.
     cfg_path = tmp_path / ".keeenv"
     cfg_path.write_text(
-        "[keepass]\n"
-        "database = ./missing-db.kdbx\n\n"
-        "[env]\n",
+        "[keepass]\n" "database = ./missing-db.kdbx\n\n" "[env]\n",
         encoding="utf-8",
     )
     # Provide secret inline; choose custom attribute with space and a different title
@@ -331,7 +327,7 @@ def test_add_existing_mapping_with_force_skips_prompt(tmp_path: Path):
         "[keepass]\n"
         "database = ./missing-db.kdbx\n\n"
         "[env]\n"
-        "EXISTING = ${\"Some\".Password}\n",
+        'EXISTING = ${"Some".Password}\n',
         encoding="utf-8",
     )
     proc = run_cli(
@@ -351,9 +347,7 @@ def test_add_inline_secret_default_title_is_env_var(tmp_path: Path):
 
     cfg_path = tmp_path / ".keeenv"
     cfg_path.write_text(
-        "[keepass]\n"
-        "database = ./missing-db.kdbx\n\n"
-        "[env]\n",
+        "[keepass]\n" "database = ./missing-db.kdbx\n\n" "[env]\n",
         encoding="utf-8",
     )
     proc = run_cli(

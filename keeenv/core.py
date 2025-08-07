@@ -76,7 +76,9 @@ def _find_keepass_entry(kp, title, create_if_missing=False):
         if has_find_groups:
             return kp.find_groups(name=gname, group=parent_group, first=True)  # type: ignore[misc]
         # Manual scan fallback
-        for child in getattr(parent_group, "subgroups", []):  # pyright: ignore[reportAttributeAccessIssue]
+        for child in getattr(
+            parent_group, "subgroups", []
+        ):  # pyright: ignore[reportAttributeAccessIssue]
             if getattr(child, "name", None) == gname:
                 return child
         return None
@@ -84,7 +86,9 @@ def _find_keepass_entry(kp, title, create_if_missing=False):
     def _find_entry_in_group(group, entry_title):
         if has_find_entries:
             return kp.find_entries(title=entry_title, group=group, first=True)  # type: ignore[misc]
-        for e in getattr(group, "entries", []):  # pyright: ignore[reportAttributeAccessIssue]
+        for e in getattr(
+            group, "entries", []
+        ):  # pyright: ignore[reportAttributeAccessIssue]
             if getattr(e, "title", None) == entry_title:
                 return e
         return None
@@ -118,11 +122,17 @@ def _find_keepass_entry(kp, title, create_if_missing=False):
         else:
             # Fallback: search in root group entries only
             entry = None
-            for e in getattr(kp.root_group, "entries", []):  # pyright: ignore[reportAttributeAccessIssue]
+            for e in getattr(
+                kp.root_group, "entries", []
+            ):  # pyright: ignore[reportAttributeAccessIssue]
                 if getattr(e, "title", None) == title:
                     entry = e
                     break
-        return entry, kp.root_group, title  # pyright: ignore[reportAttributeAccessIssue]
+        return (
+            entry,
+            kp.root_group,
+            title,
+        )  # pyright: ignore[reportAttributeAccessIssue]
 
 
 def make_case_preserving_config() -> configparser.ConfigParser:
@@ -132,6 +142,7 @@ def make_case_preserving_config() -> configparser.ConfigParser:
     - optionxform is disabled so option/ENV var case is preserved on read/write
     - _dict is set to builtin dict so section case is preserved on write
     """
+
     class _CasePreservingConfig(configparser.ConfigParser):
         def optionxform(self, optionstr: str) -> str:  # type: ignore[override]
             return optionstr
@@ -382,7 +393,7 @@ def _format_placeholder(title: str, attr: str) -> str:
     """
     # Attribute needs quotes if not a valid identifier
     needs_quote = not IDENT_RE.match(attr)
-    placeholder_attr = f"\"{attr}\"" if needs_quote else attr
+    placeholder_attr = f'"{attr}"' if needs_quote else attr
     return f'${{"{title}".{placeholder_attr}}}'
 
 
@@ -464,7 +475,7 @@ def _create_argument_parser() -> argparse.ArgumentParser:
         help="Add a new credential to KeePass and map it in .keeenv",
         description=(
             "Add a new secret to the KeePass database and populate the [env] entry "
-            "in the .keeenv file. Example: keeenv add \"GEMINI_API_KEY\" \"xxxx\""
+            'in the .keeenv file. Example: keeenv add "GEMINI_API_KEY" "xxxx"'
         ),
     )
     add_parser.add_argument(
@@ -639,9 +650,13 @@ def _init_config_interactive(
         path_exists = False
 
     if not path_exists:
-        choice = _prompt_input(
-            f"Database '{kdbx_path}' not found. Create a new KeePass database here? [y/N]: "
-        ).strip().lower()
+        choice = (
+            _prompt_input(
+                f"Database '{kdbx_path}' not found. Create a new KeePass database here? [y/N]: "
+            )
+            .strip()
+            .lower()
+        )
         if choice in ("y", "yes"):
             # Prompt for master password (twice) without echo
             pw1 = _prompt_secret("Create master password: ").strip()
@@ -653,6 +668,7 @@ def _init_config_interactive(
             try:
                 # Defer import to avoid hard dependency unless needed
                 from pykeepass import create_database
+
                 # Ensure directory exists before file creation
                 os.makedirs(os.path.dirname(kdbx_path) or ".", exist_ok=True)
                 # Create the database file on disk with the provided master password
@@ -692,7 +708,9 @@ def _init_config_interactive(
     logger.info("Created new config at %s", target)
 
 
-def _set_entry_attribute(entry, attr_lower: str, value: str, original_attr_name: str, title_for_error: str) -> None:
+def _set_entry_attribute(
+    entry, attr_lower: str, value: str, original_attr_name: str, title_for_error: str
+) -> None:
     """
     Set an attribute on a KeePass entry.
 
@@ -704,25 +722,37 @@ def _set_entry_attribute(entry, attr_lower: str, value: str, original_attr_name:
     try:
         # Standard attributes via membership (attribute name matches entry field)
         if attr_lower in STANDARD_ATTRS:
-            setattr(entry, attr_lower, value)  # pyright: ignore[reportAttributeAccessIssue]
+            setattr(
+                entry, attr_lower, value
+            )  # pyright: ignore[reportAttributeAccessIssue]
             return
 
         # custom property path
-        if hasattr(entry, "set_custom_property"):  # pyright: ignore[reportAttributeAccessIssue]
+        if hasattr(
+            entry, "set_custom_property"
+        ):  # pyright: ignore[reportAttributeAccessIssue]
             getattr(entry, "set_custom_property")(original_attr_name, value)  # type: ignore[misc]
         else:
-            has_props = hasattr(entry, "custom_properties")  # pyright: ignore[reportAttributeAccessIssue]
-            props_is_dict = has_props and isinstance(  # pyright: ignore[reportAttributeAccessIssue]
-                getattr(entry, "custom_properties"), dict
+            has_props = hasattr(
+                entry, "custom_properties"
+            )  # pyright: ignore[reportAttributeAccessIssue]
+            props_is_dict = (
+                has_props
+                and isinstance(  # pyright: ignore[reportAttributeAccessIssue]
+                    getattr(entry, "custom_properties"), dict
+                )
             )
             if not props_is_dict:
                 setattr(entry, "custom_properties", {})  # type: ignore[misc]
-            entry.custom_properties[original_attr_name] = value  # pyright: ignore[reportAttributeAccessIssue]
+            entry.custom_properties[original_attr_name] = (
+                value  # pyright: ignore[reportAttributeAccessIssue]
+            )
     except Exception as e:
         raise KeePassError(
             f"Failed to set custom attribute '{original_attr_name}' on '{title_for_error}'",
             e,
         )
+
 
 # Ensure two blank lines before top-level defs for flake8/PEP8
 
@@ -791,13 +821,19 @@ def _cmd_add(
     kp = _open_keepass_database(db_path, password, keyfile_path)
 
     # Find or create the entry using our helper function
-    entry, group_for_entry, final_title = _find_keepass_entry(kp, eff_title, create_if_missing=True)
+    entry, group_for_entry, final_title = _find_keepass_entry(
+        kp, eff_title, create_if_missing=True
+    )
 
     if entry and not force:
         # Prompt before overwriting existing entry
-        choice = _prompt_input(
-            f"Entry '{eff_title}' already exists in KeePass. Overwrite? [y/N]: "
-        ).strip().lower()
+        choice = (
+            _prompt_input(
+                f"Entry '{eff_title}' already exists in KeePass. Overwrite? [y/N]: "
+            )
+            .strip()
+            .lower()
+        )
         if choice not in ("y", "yes"):
             raise ValidationError("Add cancelled by user (existing KeePass entry).")
     if not entry:
@@ -806,7 +842,7 @@ def _cmd_add(
             group_for_entry,
             title=final_title,
             username=username if username else "",
-            password=""  # set after based on attribute
+            password="",  # set after based on attribute
         )
     else:
         # update username if requested
@@ -840,9 +876,13 @@ def _cmd_add(
     # If mapping already exists and not forcing, prompt before overwrite
     existing_mapping = cfg[ENV_SECTION].get(env_var)
     if existing_mapping is not None and not force:
-        choice = _prompt_input(
-            f"Variable '{env_var}' already exists in {config_path}. Overwrite mapping? [y/N]: "
-        ).strip().lower()
+        choice = (
+            _prompt_input(
+                f"Variable '{env_var}' already exists in {config_path}. Overwrite mapping? [y/N]: "
+            )
+            .strip()
+            .lower()
+        )
         if choice not in ("y", "yes"):
             raise ValidationError("Add cancelled by user (existing .keeenv mapping).")
 
