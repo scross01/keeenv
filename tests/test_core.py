@@ -163,7 +163,7 @@ class TestValidateConfigFile:
         """Test validation of valid config file"""
         config_content = """
 [keepass]
-database = secrets.kdbx
+database = tests/secrets.kdbx
 
 [env]
 SECRET_PASSWORD = ${"My Secret".Password}
@@ -178,7 +178,7 @@ SECRET_PASSWORD = ${"My Secret".Password}
             assert isinstance(result, configparser.ConfigParser)
             assert "keepass" in result
             assert "env" in result
-            assert result["keepass"]["database"] == "secrets.kdbx"
+            assert result["keepass"]["database"] == "tests/secrets.kdbx"
         finally:
             Path(tmp_path).unlink()
 
@@ -225,7 +225,7 @@ SECRET = value
         """Test validation fails for malformed config"""
         config_content = """
 [keepass
-database = secrets.kdbx
+database = tests/secrets.kdbx
 """
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as tmp:
@@ -264,11 +264,11 @@ class TestMainFunction:
         """Test successful main function execution"""
         # Setup mocks
         mock_config = configparser.ConfigParser()
-        mock_config["keepass"] = {"database": "secrets.kdbx"}
+        mock_config["keepass"] = {"database": "tests/secrets.kdbx"}
         mock_config["env"] = {"SECRET": '${"Test".Password}'}
         mock_validate_config.return_value = mock_config
 
-        mock_path_validator.return_value = Path("secrets.kdbx")
+        mock_path_validator.return_value = Path("tests/secrets.kdbx")
         mock_getpass.return_value = "password"
         mock_entry = Mock()
         mock_entry.find_entries.return_value = Mock(password="secret123")
@@ -312,14 +312,14 @@ class TestMainFunction:
         """Test main function with KeePass error"""
         # Setup mocks
         mock_config = configparser.ConfigParser()
-        mock_config["keepass"] = {"database": "secrets.kdbx"}
+        mock_config["keepass"] = {"database": "tests/secrets.kdbx"}
         mock_config["env"] = {"SECRET": '${"Test".Password}'}
         mock_validate_config.return_value = mock_config
 
-        mock_path_validator.return_value = Path("secrets.kdbx")
-        mock_getpass.return_value = "password"
-        mock_pykeepass.side_effect = Exception("Database error")
+        mock_path_validator.return_value = Path("tests/secrets.kdbx")
+        mock_getpass.return_value = "invalid"
+        mock_pykeepass.side_effect = Exception("Failed to open KeePass database: Invalid credentials")
 
         # core.main re-raises the original exception via _handle_error; the wrapper keeenv.main handles exit codes.
-        with pytest.raises(Exception, match="Database error"):
+        with pytest.raises(Exception, match="Failed to open KeePass database: Invalid credentials"):
             main()
