@@ -26,8 +26,6 @@ MAX_ASCII_VALUE = 126
 CUSTOM_PROPERTY_PATTERN = r"^[a-zA-Z_][a-zA-Z0-9_ ]*$"
 
 # Constants for error messages
-ERROR_TITLE_TOO_LONG = f"Entry title too long (max {MAX_TITLE_LENGTH} characters)"
-ERROR_TITLE_INVALID_CHARS = "Entry title contains invalid characters"
 ERROR_PATH_INVALID_FORMAT = "Invalid path format"
 ERROR_ATTR_INVALID_NAME = "Invalid attribute name"
 ERROR_KEYFILE_WORLD_READABLE = (
@@ -36,9 +34,6 @@ ERROR_KEYFILE_WORLD_READABLE = (
 ERROR_DATABASE_WORLD_READABLE = (
     "Database file is world-readable. Please restrict permissions to owner only."
 )
-ERROR_PATH_MUST_BE_STRING = "Path must be a non-empty string"
-ERROR_TITLE_MUST_BE_STRING = "Entry title must be a non-empty string"
-ERROR_ATTR_MUST_BE_STRING = "Attribute must be a non-empty string"
 ERROR_FILE_NOT_FOUND = "File not found: {path}"
 ERROR_PATH_NOT_FILE = "Path is not a file: {path}"
 ERROR_INVALID_PATH = "Invalid path: {error}"
