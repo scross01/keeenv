@@ -39,109 +39,150 @@ from .validation import (
 )
 
 
-def make_case_preserving_config() -> configparser.ConfigParser:
-    """
-    Create a ConfigParser that preserves case for options and section names.
+class KeeenvConfig:
+    """Class to manage .keeenv configuration file operations."""
+    
+    def __init__(self, config_path: str = CONFIG_FILENAME):
+        """Initialize with configuration file path."""
+        self.config_path = config_path
+        self._config: Optional[configparser.ConfigParser] = None
+    
+    def _make_case_preserving_config(self) -> configparser.ConfigParser:
+        """
+        Create a ConfigParser that preserves case for options and section names.
 
-    - optionxform is disabled so option/ENV var case is preserved on read/write
-    - _dict is set to builtin dict so section case is preserved on write
-    """
+        - optionxform is disabled so option/ENV var case is preserved on read/write
+        - _dict is set to builtin dict so section case is preserved on write
+        """
+        class _CasePreservingConfig(configparser.ConfigParser):
+            def optionxform(self, optionstr: str) -> str:  # type: ignore[override]
+                return optionstr
 
-    class _CasePreservingConfig(configparser.ConfigParser):
-        def optionxform(self, optionstr: str) -> str:  # type: ignore[override]
-            return optionstr
+        cfg = _CasePreservingConfig()
+        # Preserve section case on write (ConfigParser may lowercase without this)
+        cfg._dict = dict  # type: ignore[attr-defined]
+        return cfg
+    
+    def validate_config_file(self, config_path: str) -> configparser.ConfigParser:
+        """
+        Validate and parse configuration file.
 
-    cfg = _CasePreservingConfig()
-    # Preserve section case on write (ConfigParser may lowercase without this)
-    cfg._dict = dict  # type: ignore[attr-defined]
-    return cfg
+        Args:
+            config_path: Path to configuration file
 
+        Returns:
+            Validated ConfigParser object
 
-def validate_config_file(config_path: str) -> configparser.ConfigParser:
-    """
-    Validate and parse configuration file.
-
-    Args:
-        config_path: Path to configuration file
-
-    Returns:
-        Validated ConfigParser object
-
-    Raises:
-        ConfigError: If configuration file is invalid
-    """
-    try:
-        # Validate config file path
-        validated_path = PathValidator.validate_file_path(config_path, must_exist=True)
-
-        # Use a case-preserving ConfigParser
-        config = make_case_preserving_config()
-
+        Raises:
+            ConfigError: If configuration file is invalid
+        """
         try:
-            config.read(validated_path)
-        except Exception as e:
-            raise ConfigError(f"Failed to parse config file: {str(e)}")
+            # Validate config file path
+            validated_path = PathValidator.validate_file_path(config_path, must_exist=True)
 
-        # Validate required sections
-        if "keepass" not in config:
-            raise ConfigError("Missing required [keepass] section")
+            # Use a case-preserving ConfigParser
+            config = self._make_case_preserving_config()
 
-        if "database" not in config["keepass"]:
-            raise ConfigError("Missing required 'database' key in [keepass] section")
+            try:
+                config.read(validated_path)
+            except Exception as e:
+                raise ConfigError(f"Failed to parse config file: {str(e)}")
 
-        return config
+            # Validate required sections
+            if "keepass" not in config:
+                raise ConfigError("Missing required [keepass] section")
 
-    except ValidationError as e:
-        raise ConfigError(f"Configuration validation failed: {str(e)}")
+            if "database" not in config["keepass"]:
+                raise ConfigError("Missing required 'database' key in [keepass] section")
 
+            return config
 
-def _load_and_validate_config(config_path: str) -> configparser.ConfigParser:
-    """Load and validate the configuration file."""
-    if not os.path.exists(config_path):
-        raise ConfigFileNotFoundError(
-            ERROR_CONFIG_FILE_NOT_FOUND.format(config_path=config_path)
-        )
-    return validate_config_file(config_path)
-
-
-def _validate_keepass_config(
-    config: configparser.ConfigParser,
-) -> tuple[str, Optional[str]]:
-    """Validate Keepass configuration and return validated paths."""
-    if KEEPASS_SECTION not in config:
-        raise ConfigSectionMissingError(
-            ERROR_SECTION_MISSING.format(
-                section=KEEPASS_SECTION, config_file=CONFIG_FILENAME
+        except ValidationError as e:
+            raise ConfigError(f"Configuration validation failed: {str(e)}")
+    
+    def load_and_validate_config(self, config_path: str) -> configparser.ConfigParser:
+        """Load and validate the configuration file."""
+        if not os.path.exists(config_path):
+            raise ConfigFileNotFoundError(
+                ERROR_CONFIG_FILE_NOT_FOUND.format(config_path=config_path)
             )
+        return self.validate_config_file(config_path)
+    
+    def validate_keepass_config(
+        self, config: configparser.ConfigParser,
+    ) -> tuple[str, Optional[str]]:
+        """Validate Keepass configuration and return validated paths."""
+        if KEEPASS_SECTION not in config:
+            raise ConfigSectionMissingError(
+                ERROR_SECTION_MISSING.format(
+                    section=KEEPASS_SECTION, config_file=CONFIG_FILENAME
+                )
+            )
+
+        keepass_config = config[KEEPASS_SECTION]
+        db_path: Optional[str] = keepass_config.get("database")
+        keyfile_path: Optional[str] = keepass_config.get("keyfile")
+
+        if not db_path:
+            raise ConfigKeyMissingError(
+                ERROR_KEY_MISSING.format(key="database", section=KEEPASS_SECTION)
+            )
+
+        # Validate database path
+        validated_db_path = str(
+            PathValidator.validate_file_path(os.path.expanduser(db_path))
         )
 
-    keepass_config = config[KEEPASS_SECTION]
-    db_path: Optional[str] = keepass_config.get("database")
-    keyfile_path: Optional[str] = keepass_config.get("keyfile")
+        # Validate keyfile path if present
+        validated_keyfile_path = None
+        if keyfile_path:
+            validated_keyfile_path = str(
+                PathValidator.validate_file_path(os.path.expanduser(keyfile_path))
+            )
 
-    if not db_path:
-        raise ConfigKeyMissingError(
-            ERROR_KEY_MISSING.format(key="database", section=KEEPASS_SECTION)
+        # Validate file security
+        SecurityValidator.validate_database_security(
+            validated_db_path, validated_keyfile_path
         )
 
-    # Validate database path
-    validated_db_path = str(
-        PathValidator.validate_file_path(os.path.expanduser(db_path))
-    )
-
-    # Validate keyfile path if present
-    validated_keyfile_path = None
-    if keyfile_path:
-        validated_keyfile_path = str(
-            PathValidator.validate_file_path(os.path.expanduser(keyfile_path))
-        )
-
-    # Validate file security
-    SecurityValidator.validate_database_security(
-        validated_db_path, validated_keyfile_path
-    )
-
-    return validated_db_path, validated_keyfile_path
+        return validated_db_path, validated_keyfile_path
+    
+    def get_config(self) -> configparser.ConfigParser:
+        """Get the loaded configuration, loading it if necessary."""
+        if self._config is None:
+            self._config = self.load_and_validate_config(self.config_path)
+        return self._config
+    
+    def save_config(self, config: Optional[configparser.ConfigParser] = None) -> None:
+        """Save configuration to file."""
+        config_to_save = config or self._config
+        if config_to_save is None:
+            raise ConfigError("No configuration to save")
+        
+        try:
+            with open(os.path.expanduser(self.config_path), "w", encoding="utf-8") as f:
+                config_to_save.write(f)
+        except Exception as e:
+            raise ConfigError(f"Failed to write configuration file '{self.config_path}'", e)
+    
+    def get_env_section(self) -> configparser.SectionProxy:
+        """Get the [env] section from configuration."""
+        config = self.get_config()
+        if ENV_SECTION not in config:
+            config[ENV_SECTION] = {}
+            self._config = config  # Update cached config
+        return config[ENV_SECTION]
+    
+    def set_env_var(self, var_name: str, value: str) -> None:
+        """Set an environment variable in the [env] section."""
+        env_section = self.get_env_section()
+        env_section[var_name] = value
+        self._config = self.get_config()  # Update cached config
+    
+    def get_env_vars(self) -> dict[str, str]:
+        """Get all environment variables from the [env] section."""
+        env_section = self.get_env_section()
+        return dict(env_section)
 
 
 def _get_master_password(db_path: str) -> str:
@@ -344,7 +385,8 @@ def _init_config_interactive(
                 pass  # continue to write fresh
             elif choice in ("u", "update"):
                 # Read existing config (preserve key case)
-                cfg = make_case_preserving_config()
+                config_manager = KeeenvConfig(target)
+                cfg = config_manager._make_case_preserving_config()
                 try:
                     cfg.read(target)
                 except Exception as e:
@@ -463,7 +505,8 @@ def _init_config_interactive(
             raise ConfigError(f"Keyfile '{key_path}' not found. Aborting.")
 
     # Compose config (preserve key case for ENV var names)
-    cfg = make_case_preserving_config()
+    config_manager = KeeenvConfig(target)
+    cfg = config_manager._make_case_preserving_config()
     cfg[KEEPASS_SECTION] = {"database": kdbx_path}
     if keyfile:
         cfg[KEEPASS_SECTION]["keyfile"] = os.path.expanduser(keyfile)
@@ -553,10 +596,11 @@ def _cmd_add(
     logger = logging.getLogger(__name__)
 
     # Load/validate config
-    cfg = _load_and_validate_config(config_path)
+    config_manager = KeeenvConfig(config_path)
+    cfg = config_manager.get_config()
 
     # Validate keepass connection details
-    db_path, keyfile_path = _validate_keepass_config(cfg)
+    db_path, keyfile_path = config_manager.validate_keepass_config(cfg)
 
     # Ensure we have a secret
     if not secret:
@@ -634,10 +678,7 @@ def _cmd_add(
         # Ensure database connection is closed
         kp_manager.disconnect()
 
-    # Update .keeenv mapping
-    if ENV_SECTION not in cfg:
-        cfg[ENV_SECTION] = {}
-
+    # Update .keeenv mapping using KeeenvConfig
     # Compute placeholder syntax using KeePassManager
     placeholder = kp_manager.format_placeholder(eff_title, eff_attr_valid)
 
@@ -657,12 +698,8 @@ def _cmd_add(
 
     cfg[ENV_SECTION][env_var] = placeholder
 
-    # Write config back to disk
-    try:
-        with open(os.path.expanduser(config_path), "w", encoding="utf-8") as f:
-            cfg.write(f)
-    except Exception as e:
-        raise ConfigError(f"Failed to write configuration file '{config_path}'", e)
+    # Write config back to disk using KeeenvConfig
+    config_manager.save_config(cfg)
 
     logger.info(
         "Added/updated KeePass entry '%s' and mapped %s in %s",
@@ -725,10 +762,11 @@ def main() -> None:
 
     try:
         # Load and validate configuration
-        config = _load_and_validate_config(args.config)
+        config_manager = KeeenvConfig(args.config)
+        config = config_manager.get_config()
 
         # Validate Keepass configuration and get paths
-        validated_db_path, validated_keyfile_path = _validate_keepass_config(config)
+        validated_db_path, validated_keyfile_path = config_manager.validate_keepass_config(config)
 
         # Get master password
         password = _get_master_password(validated_db_path)

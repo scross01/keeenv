@@ -9,8 +9,8 @@ from unittest.mock import Mock, patch, MagicMock
 from pathlib import Path
 
 from keeenv.core import (
-    validate_config_file,
     main,
+    KeeenvConfig,
 )
 from keeenv.exceptions import (
     ConfigError,
@@ -35,7 +35,8 @@ SECRET_PASSWORD = ${"My Secret".Password}
             tmp_path = tmp.name
 
         try:
-            result = validate_config_file(tmp_path)
+            config_manager = KeeenvConfig()
+            result = config_manager.validate_config_file(tmp_path)
             assert isinstance(result, configparser.ConfigParser)
             assert "keepass" in result
             assert "env" in result
@@ -58,7 +59,8 @@ value = test
             with pytest.raises(
                 ConfigError, match="Missing required \\[keepass\\] section"
             ):
-                validate_config_file(tmp_path)
+                config_manager = KeeenvConfig()
+                config_manager.validate_config_file(tmp_path)
         finally:
             Path(tmp_path).unlink()
 
@@ -78,7 +80,8 @@ SECRET = value
 
         try:
             with pytest.raises(ConfigError, match="Missing required 'database' key"):
-                validate_config_file(tmp_path)
+                config_manager = KeeenvConfig()
+                config_manager.validate_config_file(tmp_path)
         finally:
             Path(tmp_path).unlink()
 
@@ -95,20 +98,22 @@ database = tests/secrets.kdbx
 
         try:
             with pytest.raises(ConfigError, match="Failed to parse config file"):
-                validate_config_file(tmp_path)
+                config_manager = KeeenvConfig()
+                config_manager.validate_config_file(tmp_path)
         finally:
             Path(tmp_path).unlink()
 
     def test_validate_config_file_not_found(self):
         """Test validation fails for non-existent file"""
         with pytest.raises(ConfigError, match="Configuration validation failed"):
-            validate_config_file("/nonexistent/config.toml")
+            config_manager = KeeenvConfig()
+            config_manager.validate_config_file("/nonexistent/config.toml")
 
 
 class TestMainFunction:
     """Test main function"""
 
-    @patch("keeenv.core.validate_config_file")
+    @patch("keeenv.core.KeeenvConfig")
     @patch("keeenv.core.PathValidator.validate_file_path")
     @patch("keeenv.core.SecurityValidator.validate_database_security")
     @patch("keeenv.core.getpass.getpass")
@@ -118,7 +123,7 @@ class TestMainFunction:
         mock_getpass,
         mock_security,
         mock_path_validator,
-        mock_validate_config,
+        mock_config_class,
     ):
         """Test successful main function execution using KeePassManager"""
         from keeenv.keepass import KeePassManager
@@ -127,7 +132,12 @@ class TestMainFunction:
         mock_config = configparser.ConfigParser()
         mock_config["keepass"] = {"database": "tests/secrets.kdbx"}
         mock_config["env"] = {"SECRET": '${"Test".Password}'}
-        mock_validate_config.return_value = mock_config
+        
+        # Mock the KeeenvConfig instance and its methods
+        mock_config_instance = Mock()
+        mock_config_instance.get_config.return_value = mock_config
+        mock_config_instance.validate_keepass_config.return_value = ("tests/secrets.kdbx", None)
+        mock_config_class.return_value = mock_config_instance
 
         mock_path_validator.return_value = Path("tests/secrets.kdbx")
         mock_getpass.return_value = "password"
@@ -162,12 +172,14 @@ class TestMainFunction:
                 export_calls = [call for call in calls if "export" in str(call)]
                 assert len(export_calls) > 0
 
-    @patch("keeenv.core.validate_config_file")
+    @patch("keeenv.core.KeeenvConfig")
     @patch("sys.argv", ["keeenv"])
-    def test_main_config_error(self, mock_validate_config):
+    def test_main_config_error(self, mock_config_class):
         """Test main function with config error (updated for new CLI behavior)"""
-        # Use an instance as side_effect so the code path that catches by type can run
-        mock_validate_config.side_effect = ConfigError("Test config error")
+        # Mock the KeeenvConfig instance to raise a ConfigError
+        mock_config_instance = Mock()
+        mock_config_instance.get_config.side_effect = ConfigError("Test config error")
+        mock_config_class.return_value = mock_config_instance
 
         # core.main re-raises ConfigError via _handle_error before sys.exit is invoked in keeenv.main
         with pytest.raises(ConfigError, match="Test config error"):
