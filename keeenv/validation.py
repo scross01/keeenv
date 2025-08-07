@@ -151,6 +151,16 @@ class AttributeValidator(BaseValidator):
     SUPPORTED_ATTRIBUTES = {"username", "password", "url", "notes"}
 
     @staticmethod
+    def is_standard_attr(name: Optional[str]) -> bool:
+        """
+        Return True if the provided attribute name is a supported standard field.
+        Accepts None (returns False) and is case-insensitive.
+        """
+        if not name or not isinstance(name, str):
+            return False
+        return name.lower() in AttributeValidator.SUPPORTED_ATTRIBUTES
+
+    @staticmethod
     def validate_attribute(attribute: Optional[str]) -> str:
         """
         Validate KeePass attribute name.
@@ -171,7 +181,7 @@ class AttributeValidator(BaseValidator):
         if validated_attr.startswith('"') and validated_attr.endswith('"'):
             validated_attr = validated_attr[1:-1]
 
-        if validated_attr.lower() in AttributeValidator.SUPPORTED_ATTRIBUTES:
+        if AttributeValidator.is_standard_attr(validated_attr):
             return validated_attr.lower()
 
         # Validate custom property names

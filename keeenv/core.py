@@ -126,6 +126,23 @@ def _find_keepass_entry(kp, title, create_if_missing=False):
         return entry, kp.root_group, title  # pyright: ignore[reportAttributeAccessIssue]
 
 
+def make_case_preserving_config() -> configparser.ConfigParser:
+    """
+    Create a ConfigParser that preserves case for options and section names.
+
+    - optionxform is disabled so option/ENV var case is preserved on read/write
+    - _dict is set to builtin dict so section case is preserved on write
+    """
+    class _CasePreservingConfig(configparser.ConfigParser):
+        def optionxform(self, optionstr: str) -> str:  # type: ignore[override]
+            return optionstr
+
+    cfg = _CasePreservingConfig()
+    # Preserve section case on write (ConfigParser may lowercase without this)
+    cfg._dict = dict  # type: ignore[attr-defined]
+    return cfg
+
+
 def validate_config_file(config_path: str) -> configparser.ConfigParser:
     """
     Validate and parse configuration file.
@@ -143,14 +160,8 @@ def validate_config_file(config_path: str) -> configparser.ConfigParser:
         # Validate config file path
         validated_path = PathValidator.validate_file_path(config_path, must_exist=True)
 
-        # Use a case-sensitive ConfigParser for keys to preserve ENV var casing
-        class CaseSensitiveConfigParser(configparser.ConfigParser):
-            def optionxform(self, optionstr: str) -> str:  # type: ignore[override]
-                return optionstr
-
-        config = CaseSensitiveConfigParser()
-        # Preserve case for section names as well (by default ConfigParser lowercases them on write)
-        config._dict = dict  # type: ignore[attr-defined]
+        # Use a case-preserving ConfigParser
+        config = make_case_preserving_config()
 
         try:
             config.read(validated_path)
@@ -201,30 +212,17 @@ def _get_custom_attribute(entry, attribute: str) -> Optional[str]:
 
 
 def get_keepass_secret(kp: PyKeePass, title: str, attribute: str) -> Optional[str]:
-    """Fetches a specific attribute from a KeePass entry by title.
+    """Fetch a specific attribute from a KeePass entry by title.
 
-    Supports group-qualified titles using slash-delimited paths inside the quoted title,
-    for example: ${"Group/Sub/Entry".Password}. If no slash is present, falls back to
-    legacy behavior (search anywhere by title).
+    Tries standard attributes first, then custom properties. Behavior preserved.
     """
     try:
-        # Validate inputs
         validated_title = EntryValidator.validate_entry_title(title)
         validated_attr = AttributeValidator.validate_attribute(attribute)
 
-        # Find the entry using our helper function
         entry, _, _ = _find_keepass_entry(kp, validated_title, create_if_missing=False)
-        
-        # If entry not found, raise an error
-        if not entry:
-            raise KeePassEntryNotFoundError(
-                f"Entry with title '{validated_title}' not found"
-            )
-
-        if not entry:
-            raise KeePassEntryNotFoundError(
-                f"Entry with title '{validated_title}' not found"
-            )
+        if entry is None:
+            raise KeePassError(f"Entry with title '{validated_title}' not found")
 
         # Try standard attributes first
         standard_value = _get_standard_attribute(entry, validated_attr)
@@ -244,7 +242,6 @@ def get_keepass_secret(kp: PyKeePass, title: str, attribute: str) -> Optional[st
     except Exception as e:
         if isinstance(e, (KeePassError, ValidationError)):
             raise
-        # Use original input 'title' to avoid referencing a possibly unassigned variable
         raise KeePassError(f"Failed to access entry '{title}': {str(e)}")
 
 
@@ -382,6 +379,18 @@ def _handle_error(error) -> None:
         logger.error("  Original error: %s", error.original_exception)
     # Re-raise to let the CLI layer map to exit codes
     raise error
+
+
+def _format_placeholder(title: str, attr: str) -> str:
+    """
+    Format a placeholder string ${"Title".Attr} using the same identifier rules
+    as the substitution regex. Always quote the title, and quote attribute only
+    when it is not a valid identifier ([A-Za-z_][A-Za-z0-9_]*).
+    """
+    # Attribute needs quotes if not a valid identifier
+    needs_quote = not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", attr)
+    placeholder_attr = f"\"{attr}\"" if needs_quote else attr
+    return f'${{"{title}".{placeholder_attr}}}'
 
 
 def _create_argument_parser() -> argparse.ArgumentParser:
@@ -563,10 +572,7 @@ def _init_config_interactive(
                 pass  # continue to write fresh
             elif choice in ("u", "update"):
                 # Read existing config (preserve key case)
-                class _CasePreservingConfigParser(configparser.ConfigParser):
-                    def optionxform(self, optionstr: str) -> str:  # type: ignore[override]
-                        return optionstr
-                cfg = _CasePreservingConfigParser()
+                cfg = make_case_preserving_config()
                 try:
                     cfg.read(target)
                 except Exception as e:
@@ -594,16 +600,17 @@ def _init_config_interactive(
                 if not kdbx:
                     raise ConfigError("No database path provided.")
                 kdbx_path = os.path.expanduser(kdbx)
-                if not os.path.exists(kdbx_path):
+                try:
+                    PathValidator.validate_file_path(kdbx_path, must_exist=True)
+                except ValidationError:
                     raise ConfigError(f"Database '{kdbx_path}' not found. Aborting.")
-                # Validate file path
-                PathValidator.validate_file_path(kdbx_path, must_exist=True)
                 # Validate keyfile if provided: must exist; abort if missing
                 if keyfile:
                     key_path = os.path.expanduser(keyfile)
-                    if not os.path.exists(key_path):
+                    try:
+                        PathValidator.validate_file_path(key_path, must_exist=True)
+                    except ValidationError:
                         raise ConfigError(f"Keyfile '{key_path}' not found. Aborting.")
-                    PathValidator.validate_file_path(key_path, must_exist=True)
                 # Update and write back
                 cfg[KEEPASS_SECTION]["database"] = kdbx_path
                 if keyfile:
@@ -631,7 +638,14 @@ def _init_config_interactive(
     kdbx_path = os.path.expanduser(kdbx)
 
     # If database does not exist, offer to create a new empty KeePass database
-    if not os.path.exists(kdbx_path):
+    try:
+        # If it validates as existing file, we skip creation prompt
+        PathValidator.validate_file_path(kdbx_path, must_exist=True)
+        path_exists = True
+    except ValidationError:
+        path_exists = False
+
+    if not path_exists:
         choice = _prompt_input(
             f"Database '{kdbx_path}' not found. Create a new KeePass database here? [y/N]: "
         ).strip().lower()
@@ -666,18 +680,13 @@ def _init_config_interactive(
 
     if keyfile:
         key_path = os.path.expanduser(keyfile)
-        # Abort if keyfile provided but not found
-        if not os.path.exists(key_path):
+        try:
+            PathValidator.validate_file_path(key_path, must_exist=True)
+        except ValidationError:
             raise ConfigError(f"Keyfile '{key_path}' not found. Aborting.")
-        PathValidator.validate_file_path(key_path, must_exist=True)
 
     # Compose config (preserve key case for ENV var names)
-    class CaseSensitiveConfigParser(configparser.ConfigParser):
-        def optionxform(self, optionstr: str) -> str:  # type: ignore[override]
-            return optionstr
-
-    cfg = CaseSensitiveConfigParser()
-    cfg._dict = dict  # type: ignore[attr-defined]
+    cfg = make_case_preserving_config()
     cfg[KEEPASS_SECTION] = {"database": kdbx_path}
     if keyfile:
         cfg[KEEPASS_SECTION]["keyfile"] = os.path.expanduser(keyfile)
@@ -688,6 +697,49 @@ def _init_config_interactive(
         cfg.write(f)
 
     logger.info("Created new config at %s", target)
+
+
+def _set_entry_attribute(entry, attr_lower: str, value: str, original_attr_name: str, title_for_error: str) -> None:
+    """
+    Set an attribute on a KeePass entry.
+
+    - Handles standard attributes: password, username, url, notes
+    - Falls back to creating/updating a custom property for non-standard attributes
+    - original_attr_name preserves caller's validated attribute (may have case for custom)
+    - title_for_error is used only for consistent error messages
+    """
+    try:
+        if attr_lower == "password":
+            entry.password = value  # pyright: ignore[reportAttributeAccessIssue]
+            return
+        if attr_lower == "username":
+            entry.username = value  # pyright: ignore[reportAttributeAccessIssue]
+            return
+        if attr_lower == "url":
+            entry.url = value  # pyright: ignore[reportAttributeAccessIssue]
+            return
+        if attr_lower == "notes":
+            entry.notes = value  # pyright: ignore[reportAttributeAccessIssue]
+            return
+
+        # custom property path
+        if hasattr(entry, "set_custom_property"):  # pyright: ignore[reportAttributeAccessIssue]
+            getattr(entry, "set_custom_property")(original_attr_name, value)  # type: ignore[misc]
+        else:
+            has_props = hasattr(entry, "custom_properties")  # pyright: ignore[reportAttributeAccessIssue]
+            props_is_dict = has_props and isinstance(  # pyright: ignore[reportAttributeAccessIssue]
+                getattr(entry, "custom_properties"), dict
+            )
+            if not props_is_dict:
+                setattr(entry, "custom_properties", {})  # type: ignore[misc]
+            entry.custom_properties[original_attr_name] = value  # pyright: ignore[reportAttributeAccessIssue]
+    except Exception as e:
+        raise KeePassError(
+            f"Failed to set custom attribute '{original_attr_name}' on '{title_for_error}'",
+            e,
+        )
+
+# Ensure two blank lines before top-level defs for flake8/PEP8
 
 
 def _cmd_add(
@@ -777,35 +829,8 @@ def _cmd_add(
             entry.username = username  # pyright: ignore[reportAttributeAccessIssue]
 
     # Store the secret value into the requested place
-    if attr_lower == "password":
-        entry.password = secret  # pyright: ignore[reportAttributeAccessIssue]
-    elif attr_lower == "username":
-        entry.username = secret  # pyright: ignore[reportAttributeAccessIssue]
-    elif attr_lower == "url":
-        entry.url = secret  # pyright: ignore[reportAttributeAccessIssue]
-    elif attr_lower == "notes":
-        entry.notes = secret  # pyright: ignore[reportAttributeAccessIssue]
-    else:
-        # custom property
-        try:
-            # Prefer API method if available; else, fall back to dict-like property.
-            if hasattr(entry, "set_custom_property"):  # pyright: ignore[reportAttributeAccessIssue]
-                getattr(entry, "set_custom_property")(eff_attr_valid, secret)  # type: ignore[misc]
-            else:
-                # Ensure custom_properties exists and is a dict
-                has_props = hasattr(entry, "custom_properties")  # pyright: ignore[reportAttributeAccessIssue]
-                props_is_dict = has_props and isinstance(  # pyright: ignore[reportAttributeAccessIssue]
-                    getattr(entry, "custom_properties"), dict
-                )
-                if not props_is_dict:
-                    setattr(entry, "custom_properties", {})  # type: ignore[misc]
-                # Now set the value
-                entry.custom_properties[eff_attr_valid] = secret  # pyright: ignore[reportAttributeAccessIssue]
-        except Exception as e:
-            raise KeePassError(
-                f"Failed to set custom attribute '{eff_attr_valid}' on '{eff_title}'",
-                e,
-            )
+    # Note: secret is guaranteed non-empty string above
+    _set_entry_attribute(entry, attr_lower, secret, eff_attr_valid, eff_title)
 
     # Apply optional standard fields supplied via flags (do not override if None)
     if url is not None:
@@ -823,13 +848,8 @@ def _cmd_add(
     if ENV_SECTION not in cfg:
         cfg[ENV_SECTION] = {}
 
-    # Compute placeholder syntax. Always quote the title (including group path if present).
-    # Quote attribute if needed.
-    def needs_quote_attr(a: str) -> bool:
-        return not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", a)
-
-    placeholder_attr = f"\"{eff_attr_valid}\"" if needs_quote_attr(eff_attr_valid) else eff_attr_valid
-    placeholder = f'${{"{eff_title}".{placeholder_attr}}}'
+    # Compute placeholder syntax using centralized helper.
+    placeholder = _format_placeholder(eff_title, eff_attr_valid)
 
     # Preserve exact case of env_var when writing
     # If mapping already exists and not forcing, prompt before overwrite
