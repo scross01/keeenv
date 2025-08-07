@@ -149,7 +149,7 @@ class AttributeValidator(BaseValidator):
     # We derive the supported attribute names from core.STANDARD_ATTRS keys.
     @staticmethod
     def _get_supported_attributes() -> set[str]:
-        from .core import STANDARD_ATTRS  # late import to avoid circular dependency
+        from .constants import STANDARD_ATTRS  # late import to avoid circular dependency
 
         return STANDARD_ATTRS
 

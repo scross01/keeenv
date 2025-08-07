@@ -8,9 +8,9 @@ import configparser
 from unittest.mock import Mock, patch, MagicMock
 from pathlib import Path
 
+from keeenv.config import KeeenvConfig
 from keeenv.core import (
     main,
-    KeeenvConfig,
 )
 from keeenv.exceptions import (
     ConfigError,
@@ -115,7 +115,7 @@ class TestMainFunction:
 
     @patch("keeenv.core.KeeenvConfig")
     @patch("keeenv.core.PathValidator.validate_file_path")
-    @patch("keeenv.core.SecurityValidator.validate_database_security")
+    @patch("keeenv.validation.SecurityValidator.validate_database_security")
     @patch("keeenv.core.getpass.getpass")
     @patch("sys.argv", ["keeenv"])
     def test_main_success(
@@ -132,11 +132,14 @@ class TestMainFunction:
         mock_config = configparser.ConfigParser()
         mock_config["keepass"] = {"database": "tests/secrets.kdbx"}
         mock_config["env"] = {"SECRET": '${"Test".Password}'}
-        
+
         # Mock the KeeenvConfig instance and its methods
         mock_config_instance = Mock()
         mock_config_instance.get_config.return_value = mock_config
-        mock_config_instance.validate_keepass_config.return_value = ("tests/secrets.kdbx", None)
+        mock_config_instance.validate_keepass_config.return_value = (
+            "tests/secrets.kdbx",
+            None,
+        )
         mock_config_class.return_value = mock_config_instance
 
         mock_path_validator.return_value = Path("tests/secrets.kdbx")
