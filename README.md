@@ -61,8 +61,8 @@ The CLI supports the following options:
 
 `init`: Initialize a new `.keeenv` configuration file with a `[keepass]` section.
 
-- `keeenv init [--config PATH] [--kdbx PATH] [--keyfile PATH] [--force]`
-  - `--config PATH`: Target `.keeenv` file location (defaults to `./.keeenv`).
+- `keeenv [--config PATH] init [--kdbx PATH] [--keyfile PATH] [--force]`
+  - `--config PATH`: Path to configuration file (defaults to `.keeenv`).
   - `--kdbx PATH`: Path to an existing KeePass `.kdbx` file. If omitted, you will be prompted.
   - `--keyfile PATH`: Optional key file path. If omitted, you will be prompted and may leave blank.
   - `--force`: Overwrite an existing config without prompting.
@@ -75,7 +75,7 @@ Behavior:
 
 `add`: Add a new credential to KeePass and map it in `.keeenv`.
 
-- `keeenv add ENV_VAR [SECRET] [-t TITLE] [-u USERNAME] [--url URL] [--notes NOTES] [-a ATTRIBUTE] [--force] [--config PATH]`
+- `keeenv [--config PATH] add ENV_VAR [SECRET] [-t TITLE] [-u USERNAME] [--url URL] [--notes NOTES] [-a ATTRIBUTE] [--force]`
   - `ENV_VAR`: Environment variable name to set. The exact case is preserved in `.keeenv`.
   - `SECRET`: Optional secret value. If omitted, you will be prompted securely.
   - `-t, --title TITLE`: KeePass entry Title. Defaults to `ENV_VAR`.
@@ -133,6 +133,8 @@ The `[keepass]` section configures the Keepass database to use:
 
 - `keyfile` - (optional) full or relative path to the Keepass database key file
 
+Keeenv will prompt for a master password if the database requires one. You can use a password, a keyfile, or both to secure your database.
+
 The `[env]` section sets the environment variables using `${}` to enclose substitutions from Keepass in the format of `"Entry Title".Attribute`, e.g. `"My Account".Password`.
 
 Standard attributes include:
@@ -172,7 +174,7 @@ keeenv init --kdbx ./secrets.kdbx --keyfile ./mykey.key
 Initialize at a custom location, overwrite if exists:
 
 ```shell
-keeenv init --config ./config/.keeenv --kdbx ./secrets.kdbx --force
+keeenv --config ./config/.keeenv init --kdbx ./secrets.kdbx --force
 ```
 
 Export variables using the generated config:

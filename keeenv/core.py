@@ -103,12 +103,6 @@ def _create_argument_parser() -> argparse.ArgumentParser:
         description="Create or update a .keeenv file with [keepass] entries",
     )
     init_parser.add_argument(
-        "--config",
-        metavar="PATH",
-        default=CONFIG_FILENAME,
-        help=f"Target config file path (default: {CONFIG_FILENAME})",
-    )
-    init_parser.add_argument(
         "--kdbx",
         metavar="PATH",
         help="Path to an existing KeePass .kdbx database file",
@@ -427,8 +421,14 @@ def _cmd_add(
 
     # Use KeePassManager for database operations
     kp_manager = KeePassManager(db_path, keyfile_path)
-    password = _get_master_password(db_path)
-    kp_manager.connect(password)
+    
+    # Try to connect without password first, only prompt if needed
+    try:
+        kp_manager.connect(password=None)
+    except KeePassCredentialsError:
+        # Database requires password, prompt for it
+        password = _get_master_password(db_path)
+        kp_manager.connect(password)
 
     try:
         # Find or create the entry using KeePassManager
@@ -524,7 +524,7 @@ def main() -> None:
     if getattr(args, "command", None) == "init":
         try:
             _init_config_interactive(
-                getattr(args, "config", CONFIG_FILENAME),
+                args.config,
                 getattr(args, "kdbx", None),
                 getattr(args, "keyfile", None),
                 bool(getattr(args, "force", False)),
@@ -538,7 +538,7 @@ def main() -> None:
     if getattr(args, "command", None) == "add":
         try:
             _cmd_add(
-                config_path=getattr(args, "config", CONFIG_FILENAME),
+                config_path=args.config,
                 env_var=args.env_var,
                 secret=getattr(args, "secret", None),
                 title=getattr(args, "title", None),
@@ -567,12 +567,16 @@ def main() -> None:
             config_manager.validate_keepass_config(config)
         )
 
-        # Get master password
-        password = _get_master_password(validated_db_path)
-
         # Use KeePassManager for database operations
         kp_manager = KeePassManager(validated_db_path, validated_keyfile_path)
-        kp_manager.connect(password)
+        
+        # Try to connect without password first, only prompt if needed
+        try:
+            kp_manager.connect(password=None)
+        except KeePassCredentialsError:
+            # Database requires password, prompt for it
+            password = _get_master_password(validated_db_path)
+            kp_manager.connect(password)
 
         try:
             # Process environment variables using KeePassManager

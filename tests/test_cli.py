@@ -153,7 +153,7 @@ def test_init_creates_config_with_kdbx(tmp_path: Path):
     cfg_path = tmp_path / ".keeenv"
     # Act
     proc = run_cli(
-        ["init", "--config", str(cfg_path), "--kdbx", str(kdbx)], cwd=tmp_path
+        ["--config", str(cfg_path), "init", "--kdbx", str(kdbx)], cwd=tmp_path
     )
     # Assert
     # init should complete without exiting non-zero (main does not print exports)
@@ -194,7 +194,7 @@ def test_init_update_existing_config(tmp_path: Path):
     # Simulate: choose Update 'u', then accept default current db (press Enter), then keyfile blank
     input_text = "u\n\n\n"
     proc = run_cli(
-        ["init", "--config", str(initial_cfg)], cwd=tmp_path, input_text=input_text
+        ["--config", str(initial_cfg), "init"], cwd=tmp_path, input_text=input_text
     )
     assert proc.returncode in (0, 1) or proc.stderr == ""
     # Should remain valid and contain database (either same or updated)
@@ -215,7 +215,7 @@ def test_init_overwrite_existing_config_with_force(tmp_path: Path):
     kdbx = tmp_path / "new.kdbx"
     kdbx.write_text("dummy")
     run_cli(
-        ["init", "--config", str(cfg), "--kdbx", str(kdbx), "--force"], cwd=tmp_path
+        ["--config", str(cfg), "init", "--kdbx", str(kdbx), "--force"], cwd=tmp_path
     )
     assert cfg.exists()
     content = read_config(cfg)
