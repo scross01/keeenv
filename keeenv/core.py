@@ -330,7 +330,162 @@ def _create_argument_parser() -> argparse.ArgumentParser:
         help="Show program's version number and exit",
     )
 
+    # Subcommands
+    subparsers = parser.add_subparsers(dest="command")
+
+    # init subcommand
+    init_parser = subparsers.add_parser(
+        "init",
+        help="Initialize a new .keeenv configuration file",
+        description="Create or update a .keeenv file with [keepass] entries",
+    )
+    init_parser.add_argument(
+        "--config",
+        metavar="PATH",
+        default=CONFIG_FILENAME,
+        help=f"Target config file path (default: {CONFIG_FILENAME})",
+    )
+    init_parser.add_argument(
+        "--kdbx",
+        metavar="PATH",
+        help="Path to an existing KeePass .kdbx database file",
+    )
+    init_parser.add_argument(
+        "--keyfile",
+        metavar="PATH",
+        help="Optional path to a KeePass key file",
+    )
+    init_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite existing config without prompting",
+    )
+
     return parser
+
+
+def _prompt_input(prompt: str) -> str:
+    """Prompt user for input (safe for tests)."""
+    try:
+        return input(prompt)
+    except EOFError:
+        return ""
+
+
+def _init_config_interactive(
+    target_path: str, kdbx: Optional[str], keyfile: Optional[str], force: bool
+) -> None:
+    """
+    Initialize a .keeenv file at target_path with [keepass] entries.
+
+    Behavior:
+    - If kdbx/keyfile not provided, prompt user for paths.
+    - Validate provided paths; if kdbx or keyfile paths do not exist, abort with error.
+    - If config exists: prompt to Update, Overwrite, or Abort (default Abort), unless --force.
+    """
+    logger = logging.getLogger(__name__)
+    target = os.path.expanduser(target_path)
+
+    # Ensure parent directory exists
+    parent_dir = os.path.dirname(target) or "."
+    if parent_dir and not os.path.isdir(parent_dir):
+        os.makedirs(parent_dir, exist_ok=True)
+
+    # Handle existing config
+    if os.path.exists(target):
+        if not force:
+            choice = _prompt_input(
+                f"Config '{target}' already exists. [U]pdate, [O]verwrite, [A]bort (default A): "
+            ).strip().lower()
+            if choice in ("o", "overwrite"):
+                pass  # continue to write fresh
+            elif choice in ("u", "update"):
+                # Read existing config
+                cfg = configparser.ConfigParser()
+                try:
+                    cfg.read(target)
+                except Exception as e:
+                    raise ConfigError(f"Failed to parse existing config: {e}")
+                if KEEPASS_SECTION not in cfg:
+                    cfg[KEEPASS_SECTION] = {}
+                # Determine values (prefer provided args; fall back to existing; then prompt)
+                current_db = cfg[KEEPASS_SECTION].get("database")
+                current_key = cfg[KEEPASS_SECTION].get("keyfile")
+                if not kdbx:
+                    kdbx = _prompt_input(
+                        f"Path to KeePass .kdbx file [{current_db or ''}]: "
+                    ).strip() or current_db
+                if not keyfile:
+                    keyfile = _prompt_input(
+                        f"Path to key file (optional) [{current_key or ''}]: "
+                    ).strip() or current_key
+                # Validate kdbx: must exist; abort if missing
+                if not kdbx:
+                    raise ConfigError("No database path provided.")
+                kdbx_path = os.path.expanduser(kdbx)
+                if not os.path.exists(kdbx_path):
+                    raise ConfigError(f"Database '{kdbx_path}' not found. Aborting.")
+                # Validate file path
+                PathValidator.validate_file_path(kdbx_path, must_exist=True)
+                # Validate keyfile if provided: must exist; abort if missing
+                if keyfile:
+                    key_path = os.path.expanduser(keyfile)
+                    if not os.path.exists(key_path):
+                        raise ConfigError(f"Keyfile '{key_path}' not found. Aborting.")
+                    PathValidator.validate_file_path(key_path, must_exist=True)
+                # Update and write back
+                cfg[KEEPASS_SECTION]["database"] = kdbx_path
+                if keyfile:
+                    cfg[KEEPASS_SECTION]["keyfile"] = os.path.expanduser(keyfile)
+                elif "keyfile" in cfg[KEEPASS_SECTION]:
+                    # Remove keyfile if cleared
+                    cfg[KEEPASS_SECTION].pop("keyfile", None)
+                # Ensure [env] exists
+                if ENV_SECTION not in cfg:
+                    cfg[ENV_SECTION] = {}
+                with open(target, "w", encoding="utf-8") as f:
+                    cfg.write(f)
+                logger.info("Updated existing config at %s", target)
+                return
+            else:
+                # default abort
+                raise ConfigError("Aborted by user (existing configuration).")
+        # --force implies overwrite
+
+    # Fresh or overwrite path
+    if not kdbx:
+        kdbx = _prompt_input("Path to KeePass .kdbx file: ").strip()
+    if not kdbx:
+        raise ConfigError("No database path provided.")
+    kdbx_path = os.path.expanduser(kdbx)
+    # Abort if database does not exist (no creation offer)
+    if not os.path.exists(kdbx_path):
+        raise ConfigError(f"Database '{kdbx_path}' not found. Aborting.")
+    PathValidator.validate_file_path(kdbx_path, must_exist=True)
+
+    if keyfile is None:
+        entered = _prompt_input("Path to key file (optional, press Enter to skip): ").strip()
+        keyfile = entered or None
+
+    if keyfile:
+        key_path = os.path.expanduser(keyfile)
+        # Abort if keyfile provided but not found
+        if not os.path.exists(key_path):
+            raise ConfigError(f"Keyfile '{key_path}' not found. Aborting.")
+        PathValidator.validate_file_path(key_path, must_exist=True)
+
+    # Compose config
+    cfg = configparser.ConfigParser()
+    cfg[KEEPASS_SECTION] = {"database": kdbx_path}
+    if keyfile:
+        cfg[KEEPASS_SECTION]["keyfile"] = os.path.expanduser(keyfile)
+    # Include empty [env] section when creating a new file
+    cfg[ENV_SECTION] = {}
+
+    with open(target, "w", encoding="utf-8") as f:
+        cfg.write(f)
+
+    logger.info("Created new config at %s", target)
 
 
 def main() -> None:
@@ -346,6 +501,21 @@ def main() -> None:
         logging.basicConfig(level=logging.ERROR)
     else:
         logging.basicConfig(level=logging.WARNING)
+
+    # Handle subcommands
+    if getattr(args, "command", None) == "init":
+        try:
+            _init_config_interactive(
+                getattr(args, "config", CONFIG_FILENAME),
+                getattr(args, "kdbx", None),
+                getattr(args, "keyfile", None),
+                bool(getattr(args, "force", False)),
+            )
+        except (ConfigError, ValidationError) as e:
+            _handle_error(e, 2)
+        except Exception:
+            raise
+        return
 
     # If --version or --help was provided, argparse will handle it and exit
     # So we only continue if no special arguments were provided

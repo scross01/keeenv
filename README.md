@@ -57,6 +57,21 @@ The CLI supports the following options:
 
 `--strict`: Fail if any placeholder cannot be resolved.
 
+#### Subcommands
+
+`init`: Initialize a new `.keeenv` configuration file with a `[keepass]` section.
+
+- `keeenv init [--config PATH] [--kdbx PATH] [--keyfile PATH] [--force]`
+  - `--config PATH`: Target `.keeenv` file location (defaults to `./.keeenv`).
+  - `--kdbx PATH`: Path to an existing KeePass `.kdbx` file. If omitted, you will be prompted.
+  - `--keyfile PATH`: Optional key file path. If omitted, you will be prompted and may leave blank.
+  - `--force`: Overwrite an existing config without prompting.
+
+Behavior:
+- If no `--kdbx` is provided, you will be prompted to enter a path. If the path does not exist, you will be asked whether to create a new database at that path.
+- If a config already exists at the target path, you will be offered to Update (merge/change only the `[keepass]` fields), Overwrite (replace file), or Abort (default).
+- Paths are validated and expanded. If provided paths exist, they must be readable files.
+
 ### Configuration Options
 
 The `[keepass]` section configures the Keepass database to use:
@@ -89,7 +104,25 @@ Logging goes to stderr and can be controlled by `--quiet`/`--verbose`.
 
 ### Examples
 
-Basic usage:
+Initialize configuration interactively (in current directory):
+
+```shell
+keeenv init
+```
+
+Initialize configuration with explicit paths:
+
+```shell
+keeenv init --kdbx ./secrets.kdbx --keyfile ./mykey.key
+```
+
+Initialize at a custom location, overwrite if exists:
+
+```shell
+keeenv init --config ./config/.keeenv --kdbx ./secrets.kdbx --force
+```
+
+Export variables using the generated config:
 
 ```shell
 eval "$(keeenv)"

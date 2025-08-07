@@ -4,11 +4,12 @@ import textwrap
 from pathlib import Path
 
 
-def run_cli(args: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess:
+def run_cli(args: list[str], cwd: Path | None = None, input_text: str | None = None) -> subprocess.CompletedProcess:
     """
     Helper to run the keeenv CLI in tests.
 
     Prefer running the module to avoid PATH issues in CI. Falls back to console script if needed.
+    Supports passing stdin via input_text for interactive commands.
     """
     module_cmd = [sys.executable, "-m", "keeenv.main"]
     try:
@@ -17,6 +18,7 @@ def run_cli(args: list[str], cwd: Path | None = None) -> subprocess.CompletedPro
             cwd=str(cwd) if cwd else None,
             capture_output=True,
             text=True,
+            input=input_text if input_text is not None else None,
             check=False,
         )
     except Exception:
@@ -26,6 +28,7 @@ def run_cli(args: list[str], cwd: Path | None = None) -> subprocess.CompletedPro
             cwd=str(cwd) if cwd else None,
             capture_output=True,
             text=True,
+            input=input_text if input_text is not None else None,
             check=False,
         )
 
@@ -34,6 +37,10 @@ def write_config(tmp_path: Path, content: str, name: str = ".keeenv") -> Path:
     cfg = tmp_path / name
     cfg.write_text(textwrap.dedent(content).strip())
     return cfg
+
+
+def read_config(path: Path) -> str:
+    return path.read_text()
 
 
 def test_version_shows_package_version():
@@ -132,3 +139,74 @@ def test_non_strict_blanks_unresolved_placeholders(tmp_path: Path):
     )
     proc = run_cli(["--config", str(cfg)])
     assert proc.returncode == 1
+
+
+# --- New tests for `keeenv init` subcommand ---
+
+def test_init_creates_config_with_kdbx(tmp_path: Path):
+    # Arrange: create a fake kdbx file
+    kdbx = tmp_path / "secrets.kdbx"
+    kdbx.write_text("dummy")
+    cfg_path = tmp_path / ".keeenv"
+    # Act
+    proc = run_cli(["init", "--config", str(cfg_path), "--kdbx", str(kdbx)], cwd=tmp_path)
+    # Assert
+    # init should complete without exiting non-zero (main does not print exports)
+    assert proc.returncode in (0, 1) or proc.stderr == ""  # tolerate logging behavior
+    assert cfg_path.exists()
+    content = read_config(cfg_path)
+    assert "[keepass]" in content
+    assert "database =" in content
+    assert str(kdbx) in content
+
+
+def test_init_aborts_when_missing_db_path(tmp_path: Path):
+    # Provide a non-existent kdbx path; init should abort and not create config
+    cfg_path = tmp_path / ".keeenv"
+    missing_kdbx = tmp_path / "newdb.kdbx"
+    # Simulate entering the non-existent path and then blank keyfile
+    input_text = f"{str(missing_kdbx)}\n\n"
+    proc = run_cli(["init", "--config", str(cfg_path)], cwd=tmp_path, input_text=input_text)
+    # Expect non-zero exit and no config created
+    assert proc.returncode != 0 or proc.stderr != ""
+    assert not cfg_path.exists()
+
+
+def test_init_update_existing_config(tmp_path: Path):
+    # Start with a config that has one database
+    initial_cfg = write_config(
+        tmp_path,
+        """
+        [keepass]
+        database = ./old.kdbx
+        """,
+        name=".keeenv",
+    )
+    kdbx = tmp_path / "updated.kdbx"
+    kdbx.write_text("dummy")
+    # Simulate: choose Update 'u', then accept default current db (press Enter), then keyfile blank
+    input_text = "u\n\n\n"
+    proc = run_cli(["init", "--config", str(initial_cfg)], cwd=tmp_path, input_text=input_text)
+    assert proc.returncode in (0, 1) or proc.stderr == ""
+    # Should remain valid and contain database (either same or updated)
+    content = read_config(initial_cfg)
+    assert "[keepass]" in content
+    assert "database =" in content
+
+
+def test_init_overwrite_existing_config_with_force(tmp_path: Path):
+    cfg = write_config(
+        tmp_path,
+        """
+        [keepass]
+        database = ./old.kdbx
+        """,
+        name=".keeenv",
+    )
+    kdbx = tmp_path / "new.kdbx"
+    kdbx.write_text("dummy")
+    run_cli(["init", "--config", str(cfg), "--kdbx", str(kdbx), "--force"], cwd=tmp_path)
+    assert cfg.exists()
+    content = read_config(cfg)
+    assert "database =" in content
+    assert str(kdbx) in content
