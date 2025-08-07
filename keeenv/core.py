@@ -543,9 +543,33 @@ def _init_config_interactive(
     if not kdbx:
         raise ConfigError("No database path provided.")
     kdbx_path = os.path.expanduser(kdbx)
-    # Abort if database does not exist (no creation offer)
+
+    # If database does not exist, offer to create a new empty KeePass database
     if not os.path.exists(kdbx_path):
-        raise ConfigError(f"Database '{kdbx_path}' not found. Aborting.")
+        choice = _prompt_input(
+            f"Database '{kdbx_path}' not found. Create a new KeePass database here? [y/N]: "
+        ).strip().lower()
+        if choice in ("y", "yes"):
+            # Prompt for master password (twice) without echo
+            pw1 = _prompt_secret("Create master password: ").strip()
+            pw2 = _prompt_secret("Confirm master password: ").strip()
+            if not pw1:
+                raise ConfigError("Master password cannot be empty.")
+            if pw1 != pw2:
+                raise ConfigError("Passwords do not match.")
+            try:
+                # Defer import to avoid hard dependency unless needed
+                from pykeepass import create_database
+                # Ensure directory exists before file creation
+                os.makedirs(os.path.dirname(kdbx_path) or ".", exist_ok=True)
+                # Create the database file on disk with the provided master password
+                create_database(kdbx_path, password=pw1)
+                logger.info("Created new KeePass database at %s", kdbx_path)
+            except Exception as e:
+                raise KeePassError("Failed to create KeePass database", e)
+        else:
+            raise ConfigError(f"Database '{kdbx_path}' not found. Aborting.")
+    # Validate (must exist at this point)
     PathValidator.validate_file_path(kdbx_path, must_exist=True)
 
     if keyfile is None:
