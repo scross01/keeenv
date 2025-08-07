@@ -417,6 +417,11 @@ def _create_argument_parser() -> argparse.ArgumentParser:
         metavar="ATTRIBUTE",
         help='Attribute to store secret in (default: "Password"). For custom attributes, quotes are not required here.',
     )
+    add_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite existing KeePass entry and .keeenv mapping without prompting",
+    )
     # Reuse top-level --config for .keeenv path and Keepass connection
 
     return parser
@@ -584,6 +589,7 @@ def _cmd_add(
     url: Optional[str],
     notes: Optional[str],
     attribute: Optional[str],
+    force: bool = False,
 ) -> None:
     """
     Implement `keeenv add` to create/update a KeePass entry and map it in .keeenv.
@@ -627,6 +633,13 @@ def _cmd_add(
 
     # Create or update entry in the root group (default)
     entry = kp.find_entries(title=eff_title, first=True)
+    if entry and not force:
+        # Prompt before overwriting existing entry
+        choice = _prompt_input(
+            f"Entry '{eff_title}' already exists in KeePass. Overwrite? [y/N]: "
+        ).strip().lower()
+        if choice not in ("y", "yes"):
+            raise ValidationError("Add cancelled by user (existing KeePass entry).")
     if not entry:
         # create a new entry; set username only if provided
         entry = kp.add_entry(
@@ -695,6 +708,15 @@ def _cmd_add(
     placeholder = f'${{"{eff_title}".{placeholder_attr}}}'
 
     # Preserve exact case of env_var when writing
+    # If mapping already exists and not forcing, prompt before overwrite
+    existing_mapping = cfg[ENV_SECTION].get(env_var)
+    if existing_mapping is not None and not force:
+        choice = _prompt_input(
+            f"Variable '{env_var}' already exists in {config_path}. Overwrite mapping? [y/N]: "
+        ).strip().lower()
+        if choice not in ("y", "yes"):
+            raise ValidationError("Add cancelled by user (existing .keeenv mapping).")
+
     cfg[ENV_SECTION][env_var] = placeholder
 
     # Write config back to disk
@@ -752,6 +774,7 @@ def main() -> None:
                 url=getattr(args, "url", None),
                 notes=getattr(args, "notes", None),
                 attribute=getattr(args, "attribute", None),
+                force=bool(getattr(args, "force", False)),
             )
         except (ConfigError, KeePassError, ValidationError, SecurityError) as e:
             _handle_error(e)

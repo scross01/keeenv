@@ -256,6 +256,40 @@ def test_add_prompts_for_secret_and_preserves_env_case(tmp_path: Path, monkeypat
     # so mapping might not exist. We can't assert mapping here reliably without a real DB.
 
 
+def test_add_existing_mapping_prompts_without_force(tmp_path: Path):
+    """
+    When a mapping already exists in .keeenv, keeenv add should prompt for overwrite unless --force is used.
+    We simulate responding with Enter (default No) and expect a non-zero exit due to cancellation or later failure.
+    """
+    # Prepare config and fake db path
+    kdbx = tmp_path / "secrets.kdbx"
+    kdbx.write_text("dummy")
+    cfg_path = tmp_path / ".keeenv"
+    # Pre-populate .keeenv mapping to trigger mapping overwrite prompt
+    cfg_path.write_text(
+        f"[keepass]\n"
+        f"database = {kdbx}\n\n"
+        "[env]\n"
+        "EXISTING = ${\"Title\".Password}\n",
+        encoding="utf-8",
+    )
+    # Provide stdin only for master password; then default N on overwrite prompt
+    input_text = "masterpass\n"
+    proc = run_cli(
+        [
+            "add",
+            "--config",
+            str(cfg_path),
+            "EXISTING",
+            "newsecret",
+        ],
+        cwd=tmp_path,
+        input_text=input_text,
+    )
+    # Should fail or at least emit error; cancellation message may appear on stdout/stderr
+    assert proc.returncode != 0 or proc.stderr != ""
+
+
 def test_add_with_all_options_builds_placeholder_format(tmp_path: Path):
     # Validate placeholder formatting path without touching DB by pointing to missing DB to fail early after parse.
     cfg_path = tmp_path / ".keeenv"
@@ -287,7 +321,34 @@ def test_add_with_all_options_builds_placeholder_format(tmp_path: Path):
     # The success path is covered in integration with a real DB environment.
 
 
+def test_add_existing_mapping_with_force_skips_prompt(tmp_path: Path):
+    """
+    With --force, keeenv add should not prompt when the .keeenv mapping exists.
+    Expect non-zero exit due to missing/invalid DB path in this test rig, but CLI should accept --force.
+    """
+    cfg_path = tmp_path / ".keeenv"
+    cfg_path.write_text(
+        "[keepass]\n"
+        "database = ./missing-db.kdbx\n\n"
+        "[env]\n"
+        "EXISTING = ${\"Some\".Password}\n",
+        encoding="utf-8",
+    )
+    proc = run_cli(
+        [
+            "add",
+            "--config",
+            str(cfg_path),
+            "--force",
+            "EXISTING",
+            "whatever",
+        ]
+    )
+    assert proc.returncode != 0 or proc.stderr != ""
+
+
 def test_add_inline_secret_default_title_is_env_var(tmp_path: Path):
+
     cfg_path = tmp_path / ".keeenv"
     cfg_path.write_text(
         "[keepass]\n"

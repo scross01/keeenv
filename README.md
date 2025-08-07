@@ -75,7 +75,7 @@ Behavior:
 
 `add`: Add a new credential to KeePass and map it in `.keeenv`.
 
-- `keeenv add ENV_VAR [SECRET] [-t TITLE] [-u USERNAME] [--url URL] [--notes NOTES] [-a ATTRIBUTE] [--config PATH]`
+- `keeenv add ENV_VAR [SECRET] [-t TITLE] [-u USERNAME] [--url URL] [--notes NOTES] [-a ATTRIBUTE] [--force] [--config PATH]`
   - `ENV_VAR`: Environment variable name to set. The exact case is preserved in `.keeenv`.
   - `SECRET`: Optional secret value. If omitted, you will be prompted securely.
   - `-t, --title TITLE`: KeePass entry Title. Defaults to `ENV_VAR`.
@@ -83,14 +83,15 @@ Behavior:
   - `--url URL`: Optional URL to set on the KeePass entry.
   - `--notes NOTES`: Optional notes to set on the KeePass entry.
   - `-a, --attribute ATTRIBUTE`: Attribute in which to store the secret. Defaults to `Password`. Standard attributes: `Username`, `Password`, `URL`, `Notes`. Custom attributes are supported; quotes are not required here and will be handled appropriately in the mapping.
+  - `--force`: Overwrite existing KeePass entry and/or existing `.keeenv` mapping without prompting.
   - `--config PATH`: Path to the `.keeenv` configuration (defaults to `./.keeenv`).
 
 Behavior:
 
 - Opens the KeePass database configured under `[keepass]`.
-- Creates the entry if it does not exist, or updates it if it does.
+- Creates the entry if it does not exist. If the entry already exists, you will be prompted to confirm overwrite unless `--force` is specified.
 - Stores the provided secret into the specified attribute (default `Password`), and sets `Username` if provided via `-u/--user`.
-- Updates `[env]` in `.keeenv` to map `ENV_VAR` to the entry using placeholder syntax `${"Title".Attribute}`. Attribute names that require quoting are quoted automatically. Environment variable case is preserved.
+- Updates `[env]` in `.keeenv` to map `ENV_VAR` to the entry using placeholder syntax `${"Title".Attribute}`. Attribute names that require quoting are quoted automatically. Environment variable case is preserved. If the mapping for `ENV_VAR` already exists, you will be prompted to confirm overwrite unless `--force` is specified.
 
 Examples:
 
@@ -103,6 +104,9 @@ keeenv add "GEMINI_API_KEY"
 
 # Custom title and username, store in custom attribute "API Key"
 keeenv add -t "Gemini API Key" -u "me@example.com" --url "https://console.cloud.google.com/" --notes "Scopes: genai" -a "API Key" "GEMINI_API_KEY" "xxxx1234567890"
+
+# Overwrite existing entry and mapping without interactive prompts
+keeenv add --force "GEMINI_API_KEY" "new-secret-value"
 ```
 
 ### Configuration Options
