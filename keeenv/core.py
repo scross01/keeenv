@@ -95,31 +95,6 @@ def validate_config_file(config_path: str) -> configparser.ConfigParser:
         raise ConfigError(f"Configuration validation failed: {str(e)}")
 
 
-def _get_standard_attribute(entry, attribute: str) -> Optional[str]:
-    """Get standard attribute from KeePass entry using STANDARD_ATTRS membership."""
-    attr_lower = attribute.lower()
-    if attr_lower not in STANDARD_ATTRS:
-        return None
-    # attr_lower is one of the standard names and matches the entry attribute
-    return getattr(entry, attr_lower)  # pyright: ignore[reportAttributeAccessIssue]
-
-
-def _get_custom_attribute(entry, attribute: str) -> Optional[str]:
-    """Get custom attribute from KeePass entry."""
-    if (
-        hasattr(entry, "custom_properties")
-        and isinstance(
-            entry.custom_properties, dict
-        )  # pyright: ignore[reportAttributeAccessIssue]
-        and attribute
-        in entry.custom_properties  # pyright: ignore[reportAttributeAccessIssue]
-    ):
-        return entry.custom_properties[
-            attribute
-        ]  # pyright: ignore[reportAttributeAccessIssue]
-    return None
-
-
 def _load_and_validate_config(config_path: str) -> configparser.ConfigParser:
     """Load and validate the configuration file."""
     if not os.path.exists(config_path):
