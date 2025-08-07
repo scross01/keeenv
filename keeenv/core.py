@@ -402,6 +402,16 @@ def _create_argument_parser() -> argparse.ArgumentParser:
         help="Optional username to set on the KeePass entry",
     )
     add_parser.add_argument(
+        "--url",
+        metavar="URL",
+        help="Optional URL to set on the KeePass entry",
+    )
+    add_parser.add_argument(
+        "--notes",
+        metavar="NOTES",
+        help="Optional notes to set on the KeePass entry",
+    )
+    add_parser.add_argument(
         "-a",
         "--attribute",
         metavar="ATTRIBUTE",
@@ -571,6 +581,8 @@ def _cmd_add(
     secret: Optional[str],
     title: Optional[str],
     username: Optional[str],
+    url: Optional[str],
+    notes: Optional[str],
     attribute: Optional[str],
 ) -> None:
     """
@@ -659,6 +671,12 @@ def _cmd_add(
                 e,
             )
 
+    # Apply optional standard fields supplied via flags (do not override if None)
+    if url is not None:
+        entry.url = url  # pyright: ignore[reportAttributeAccessIssue]
+    if notes is not None:
+        entry.notes = notes  # pyright: ignore[reportAttributeAccessIssue]
+
     # Save database
     try:
         kp.save()
@@ -731,6 +749,8 @@ def main() -> None:
                 secret=getattr(args, "secret", None),
                 title=getattr(args, "title", None),
                 username=getattr(args, "user", None),
+                url=getattr(args, "url", None),
+                notes=getattr(args, "notes", None),
                 attribute=getattr(args, "attribute", None),
             )
         except (ConfigError, KeePassError, ValidationError, SecurityError) as e:

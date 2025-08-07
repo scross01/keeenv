@@ -75,11 +75,13 @@ Behavior:
 
 `add`: Add a new credential to KeePass and map it in `.keeenv`.
 
-- `keeenv add ENV_VAR [SECRET] [-t TITLE] [-u USERNAME] [-a ATTRIBUTE] [--config PATH]`
+- `keeenv add ENV_VAR [SECRET] [-t TITLE] [-u USERNAME] [--url URL] [--notes NOTES] [-a ATTRIBUTE] [--config PATH]`
   - `ENV_VAR`: Environment variable name to set. The exact case is preserved in `.keeenv`.
   - `SECRET`: Optional secret value. If omitted, you will be prompted securely.
   - `-t, --title TITLE`: KeePass entry Title. Defaults to `ENV_VAR`.
   - `-u, --user USERNAME`: Optional Username for the entry.
+  - `--url URL`: Optional URL to set on the KeePass entry.
+  - `--notes NOTES`: Optional notes to set on the KeePass entry.
   - `-a, --attribute ATTRIBUTE`: Attribute in which to store the secret. Defaults to `Password`. Standard attributes: `Username`, `Password`, `URL`, `Notes`. Custom attributes are supported; quotes are not required here and will be handled appropriately in the mapping.
   - `--config PATH`: Path to the `.keeenv` configuration (defaults to `./.keeenv`).
 
@@ -100,7 +102,7 @@ keeenv add "GEMINI_API_KEY" "xxxx1234567890"
 keeenv add "GEMINI_API_KEY"
 
 # Custom title and username, store in custom attribute "API Key"
-keeenv add -t "Gemini API Key" -u "me@example.com" -a "API Key" "GEMINI_API_KEY" "xxxx1234567890"
+keeenv add -t "Gemini API Key" -u "me@example.com" --url "https://console.cloud.google.com/" --notes "Scopes: genai" -a "API Key" "GEMINI_API_KEY" "xxxx1234567890"
 ```
 
 ### Configuration Options
