@@ -53,6 +53,79 @@ ERROR_SECTION_MISSING_NO_VARS = (
 )
 
 
+def _find_keepass_entry(kp, title, create_if_missing=False):
+    """
+    Find a KeePass entry by title, with optional group path support.
+    
+    Args:
+        kp: PyKeePass instance
+        title: Entry title, may include group path separated by '/'
+        create_if_missing: If True, create missing groups (used in _cmd_add)
+        
+    Returns:
+        tuple: (entry, group, final_title) where entry is the found entry (or None if not found),
+               group is the group where the entry should be located, and final_title is the
+               title of the entry to be created/updated
+    """
+    # Split path into group path and entry title
+    parts = [p for p in title.split("/") if p != ""]
+    
+    if len(parts) > 1:
+        # Traverse groups from root to locate the final group
+        group_names = parts[:-1]
+        entry_title = parts[-1]
+        
+        current_group = kp.root_group  # pyright: ignore[reportAttributeAccessIssue]
+        for gname in group_names:
+            # Try to find subgroup under current_group
+            next_group = None
+            if hasattr(kp, "find_groups"):
+                next_group = kp.find_groups(name=gname, group=current_group, first=True)  # type: ignore[misc]
+            else:
+                # Fallback: iterate children
+                children = getattr(current_group, "subgroups", [])  # pyright: ignore[reportAttributeAccessIssue]
+                for child in children:
+                    if getattr(child, "name", None) == gname:
+                        next_group = child
+                        break
+            
+            # If group not found and we should create it
+            if not next_group and create_if_missing:
+                next_group = kp.add_group(current_group, gname)  # type: ignore[misc]
+            elif not next_group:
+                # Group not found and we shouldn't create it
+                raise KeePassEntryNotFoundError(
+                    f"Group path '{'/'.join(group_names)}' not found for '{title}'"
+                )
+            
+            current_group = next_group  # type: ignore[assignment]
+        
+        # Now find the entry by title in the resolved group
+        entry = None
+        if hasattr(kp, "find_entries"):
+            entry = kp.find_entries(title=entry_title, group=current_group, first=True)  # type: ignore[misc]
+        else:
+            # Fallback scan entries in group
+            for e in getattr(current_group, "entries", []):  # pyright: ignore[reportAttributeAccessIssue]
+                if getattr(e, "title", None) == entry_title:
+                    entry = e
+                    break
+        
+        return entry, current_group, entry_title
+    else:
+        # No group path → search anywhere or in root group
+        entry = None
+        if hasattr(kp, "find_entries"):
+            entry = kp.find_entries(title=title, first=True)  # type: ignore[misc]
+        else:
+            # Fallback: search in root group entries
+            for e in getattr(kp.root_group, "entries", []):  # pyright: ignore[reportAttributeAccessIssue]
+                if getattr(e, "title", None) == title:
+                    entry = e
+                    break
+        return entry, kp.root_group, title  # pyright: ignore[reportAttributeAccessIssue]
+
+
 def validate_config_file(config_path: str) -> configparser.ConfigParser:
     """
     Validate and parse configuration file.
@@ -139,48 +212,14 @@ def get_keepass_secret(kp: PyKeePass, title: str, attribute: str) -> Optional[st
         validated_title = EntryValidator.validate_entry_title(title)
         validated_attr = AttributeValidator.validate_attribute(attribute)
 
-        # Split path into group path and entry title. Allow consecutive slashes to mean
-        # empty segments are ignored.
-        parts = [p for p in validated_title.split("/") if p != ""]
-        entry = None
-
-        if len(parts) > 1:
-            # Traverse groups from root to locate the final group, then find entry by last part
-            group_names = parts[:-1]
-            entry_title = parts[-1]
-
-            current_group = kp.root_group  # pyright: ignore[reportAttributeAccessIssue]
-            for gname in group_names:
-                # find immediate subgroup with this name under current_group
-                next_group = None
-                # Prefer API if available
-                if hasattr(kp, "find_groups"):
-                    next_group = kp.find_groups(name=gname, group=current_group, first=True)  # type: ignore[misc]
-                else:
-                    # Fallback: iterate children
-                    children = getattr(current_group, "subgroups", [])  # pyright: ignore[reportAttributeAccessIssue]
-                    for child in children:
-                        if getattr(child, "name", None) == gname:
-                            next_group = child
-                            break
-                if not next_group:
-                    raise KeePassEntryNotFoundError(
-                        f"Group path '{'/'.join(group_names)}' not found for '{validated_title}'"
-                    )
-                current_group = next_group  # type: ignore[assignment]
-
-            # Now find the entry by title in the resolved group
-            if hasattr(kp, "find_entries"):
-                entry = kp.find_entries(title=entry_title, group=current_group, first=True)  # type: ignore[misc]
-            else:
-                # Fallback scan entries in group
-                for e in getattr(current_group, "entries", []):  # pyright: ignore[reportAttributeAccessIssue]
-                    if getattr(e, "title", None) == entry_title:
-                        entry = e
-                        break
-        else:
-            # No group path → original behavior (search anywhere)
-            entry = kp.find_entries(title=validated_title, first=True)
+        # Find the entry using our helper function
+        entry, _, _ = _find_keepass_entry(kp, validated_title, create_if_missing=False)
+        
+        # If entry not found, raise an error
+        if not entry:
+            raise KeePassEntryNotFoundError(
+                f"Entry with title '{validated_title}' not found"
+            )
 
         if not entry:
             raise KeePassEntryNotFoundError(
@@ -714,35 +753,8 @@ def _cmd_add(
     password = _get_master_password(db_path)
     kp = _open_keepass_database(db_path, password, keyfile_path)
 
-    # Determine group path support in title. If eff_title contains slashes,
-    # treat all but the last segment as groups and the last as the entry title.
-    title_parts = [p for p in eff_title.split("/") if p != ""]
-    group_for_entry = kp.root_group  # pyright: ignore[reportAttributeAccessIssue]
-    final_title = eff_title
-    if len(title_parts) > 1:
-        final_title = title_parts[-1]
-        # Traverse or create groups as needed
-        current_group = group_for_entry
-        for gname in title_parts[:-1]:
-            # Try to find subgroup under current_group
-            subgroup = None
-            if hasattr(kp, "find_groups"):
-                subgroup = kp.find_groups(name=gname, group=current_group, first=True)  # type: ignore[misc]
-            if not subgroup:
-                # Create subgroup
-                subgroup = kp.add_group(current_group, gname)  # type: ignore[misc]
-            current_group = subgroup  # type: ignore[assignment]
-        group_for_entry = current_group
-
-    # Create or update entry in resolved group
-    if hasattr(kp, "find_entries"):
-        entry = kp.find_entries(title=final_title, group=group_for_entry, first=True)  # type: ignore[misc]
-    else:
-        entry = None
-        for e in getattr(group_for_entry, "entries", []):  # pyright: ignore[reportAttributeAccessIssue]
-            if getattr(e, "title", None) == final_title:
-                entry = e
-                break
+    # Find or create the entry using our helper function
+    entry, group_for_entry, final_title = _find_keepass_entry(kp, eff_title, create_if_missing=True)
 
     if entry and not force:
         # Prompt before overwriting existing entry
