@@ -6,8 +6,8 @@ Main entry point for keeenv - Populate environment variables from Keepass
 # Verbosity flags are parsed/configured inside core._create_argument_parser()/main.
 # This CLI wrapper is responsible for exit codes.
 import sys
-from .core import main as keeenv_main
-from .exceptions import ConfigError, KeePassError, ValidationError, SecurityError
+from keeenv.core import main as keeenv_main
+from keeenv.exceptions import ConfigError, KeePassError, ValidationError, SecurityError
 
 
 def main() -> None:

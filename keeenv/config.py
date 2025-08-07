@@ -1,4 +1,6 @@
-from typing import Optional
+import configparser
+import os
+
 from keeenv.constants import (
     CONFIG_FILENAME,
     ENV_SECTION,
@@ -15,10 +17,7 @@ from keeenv.exceptions import (
     ValidationError,
 )
 from keeenv.validation import PathValidator, SecurityValidator
-
-
-import configparser
-import os
+from typing import Optional
 
 
 class KeeenvConfig:

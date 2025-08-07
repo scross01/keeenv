@@ -1,4 +1,6 @@
-from typing import Optional
+import logging
+import re
+
 from keeenv.constants import (
     ERROR_DATABASE_OPEN_FAILED,
     ERROR_INVALID_PASSWORD_OR_KEYFILE,
@@ -15,15 +17,10 @@ from keeenv.exceptions import (
     ValidationError,
 )
 from keeenv.validation import AttributeValidator, EntryValidator
-
-
 from pykeepass import PyKeePass
 from pykeepass.entry import Entry
 from pykeepass.exceptions import CredentialsError
-
-
-import logging
-import re
+from typing import Optional
 
 
 class KeePassManager:

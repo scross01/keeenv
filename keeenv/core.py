@@ -3,33 +3,32 @@
 
 import argparse
 import getpass
+import logging
 import os
 import shlex
-import logging
 import sys
-from typing import Optional
 
 from keeenv.config import KeeenvConfig
-
-from .keepass import KeePassManager
-from .constants import (
+from keeenv.constants import (
     ERROR_COULD_NOT_READ_PASSWORD,
     CONFIG_FILENAME,
     KEEPASS_SECTION,
     ENV_SECTION,
 )
-from .exceptions import (
+from keeenv.exceptions import (
     ConfigError,
     KeePassError,
     KeePassCredentialsError,
     ValidationError,
     SecurityError,
 )
-from .validation import (
+from keeenv.keepass import KeePassManager
+from keeenv.validation import (
     EntryValidator,
     AttributeValidator,
     PathValidator,
 )
+from typing import Optional
 
 
 def _get_master_password(db_path: str) -> str:
