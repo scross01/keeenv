@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import Mock
 
 
-from keeenv.core import KeePassManager
+from keeenv.keepass import KeePassManager
 from keeenv.exceptions import KeePassError
 
 
@@ -33,12 +33,12 @@ class TestKeePassManager(unittest.TestCase):
         mock_pykeepass_class = Mock()
         mock_kp = Mock()
         mock_pykeepass_class.return_value = mock_kp
-        
+
         # Use dependency injection
         manager = KeePassManager(
             self.test_db_path,
             self.test_keyfile_path,
-            pykeepass_class=mock_pykeepass_class
+            pykeepass_class=mock_pykeepass_class,
         )
         manager.connect("test_password")
         self.assertTrue(manager._is_connected)
@@ -53,12 +53,12 @@ class TestKeePassManager(unittest.TestCase):
         """Test database connection failure."""
         # Create a mock that will raise an exception
         mock_pykeepass_class = Mock(side_effect=Exception("Connection failed"))
-        
+
         # Use dependency injection
         manager = KeePassManager(
             self.test_db_path,
             self.test_keyfile_path,
-            pykeepass_class=mock_pykeepass_class
+            pykeepass_class=mock_pykeepass_class,
         )
         with self.assertRaises(KeePassError):
             manager.connect("wrong_password")
