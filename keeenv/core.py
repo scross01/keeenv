@@ -128,13 +128,60 @@ def _get_custom_attribute(entry, attribute: str) -> Optional[str]:
 
 
 def get_keepass_secret(kp: PyKeePass, title: str, attribute: str) -> Optional[str]:
-    """Fetches a specific attribute from a Keepass entry by title."""
+    """Fetches a specific attribute from a KeePass entry by title.
+
+    Supports group-qualified titles using slash-delimited paths inside the quoted title,
+    for example: ${"Group/Sub/Entry".Password}. If no slash is present, falls back to
+    legacy behavior (search anywhere by title).
+    """
     try:
         # Validate inputs
         validated_title = EntryValidator.validate_entry_title(title)
         validated_attr = AttributeValidator.validate_attribute(attribute)
 
-        entry = kp.find_entries(title=validated_title, first=True)
+        # Split path into group path and entry title. Allow consecutive slashes to mean
+        # empty segments are ignored.
+        parts = [p for p in validated_title.split("/") if p != ""]
+        entry = None
+
+        if len(parts) > 1:
+            # Traverse groups from root to locate the final group, then find entry by last part
+            group_names = parts[:-1]
+            entry_title = parts[-1]
+
+            current_group = kp.root_group  # pyright: ignore[reportAttributeAccessIssue]
+            for gname in group_names:
+                # find immediate subgroup with this name under current_group
+                next_group = None
+                # Prefer API if available
+                if hasattr(kp, "find_groups"):
+                    next_group = kp.find_groups(name=gname, group=current_group, first=True)  # type: ignore[misc]
+                else:
+                    # Fallback: iterate children
+                    children = getattr(current_group, "subgroups", [])  # pyright: ignore[reportAttributeAccessIssue]
+                    for child in children:
+                        if getattr(child, "name", None) == gname:
+                            next_group = child
+                            break
+                if not next_group:
+                    raise KeePassEntryNotFoundError(
+                        f"Group path '{'/'.join(group_names)}' not found for '{validated_title}'"
+                    )
+                current_group = next_group  # type: ignore[assignment]
+
+            # Now find the entry by title in the resolved group
+            if hasattr(kp, "find_entries"):
+                entry = kp.find_entries(title=entry_title, group=current_group, first=True)  # type: ignore[misc]
+            else:
+                # Fallback scan entries in group
+                for e in getattr(current_group, "entries", []):  # pyright: ignore[reportAttributeAccessIssue]
+                    if getattr(e, "title", None) == entry_title:
+                        entry = e
+                        break
+        else:
+            # No group path → original behavior (search anywhere)
+            entry = kp.find_entries(title=validated_title, first=True)
+
         if not entry:
             raise KeePassEntryNotFoundError(
                 f"Entry with title '{validated_title}' not found"
@@ -667,8 +714,36 @@ def _cmd_add(
     password = _get_master_password(db_path)
     kp = _open_keepass_database(db_path, password, keyfile_path)
 
-    # Create or update entry in the root group (default)
-    entry = kp.find_entries(title=eff_title, first=True)
+    # Determine group path support in title. If eff_title contains slashes,
+    # treat all but the last segment as groups and the last as the entry title.
+    title_parts = [p for p in eff_title.split("/") if p != ""]
+    group_for_entry = kp.root_group  # pyright: ignore[reportAttributeAccessIssue]
+    final_title = eff_title
+    if len(title_parts) > 1:
+        final_title = title_parts[-1]
+        # Traverse or create groups as needed
+        current_group = group_for_entry
+        for gname in title_parts[:-1]:
+            # Try to find subgroup under current_group
+            subgroup = None
+            if hasattr(kp, "find_groups"):
+                subgroup = kp.find_groups(name=gname, group=current_group, first=True)  # type: ignore[misc]
+            if not subgroup:
+                # Create subgroup
+                subgroup = kp.add_group(current_group, gname)  # type: ignore[misc]
+            current_group = subgroup  # type: ignore[assignment]
+        group_for_entry = current_group
+
+    # Create or update entry in resolved group
+    if hasattr(kp, "find_entries"):
+        entry = kp.find_entries(title=final_title, group=group_for_entry, first=True)  # type: ignore[misc]
+    else:
+        entry = None
+        for e in getattr(group_for_entry, "entries", []):  # pyright: ignore[reportAttributeAccessIssue]
+            if getattr(e, "title", None) == final_title:
+                entry = e
+                break
+
     if entry and not force:
         # Prompt before overwriting existing entry
         choice = _prompt_input(
@@ -679,8 +754,8 @@ def _cmd_add(
     if not entry:
         # create a new entry; set username only if provided
         entry = kp.add_entry(
-            kp.root_group,
-            title=eff_title,
+            group_for_entry,
+            title=final_title,
             username=username if username else "",
             password=""  # set after based on attribute
         )
@@ -736,7 +811,8 @@ def _cmd_add(
     if ENV_SECTION not in cfg:
         cfg[ENV_SECTION] = {}
 
-    # Compute placeholder syntax. Always quote the title. Quote attribute if needed.
+    # Compute placeholder syntax. Always quote the title (including group path if present).
+    # Quote attribute if needed.
     def needs_quote_attr(a: str) -> bool:
         return not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", a)
 

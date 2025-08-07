@@ -112,6 +112,19 @@ keeenv add -t "Gemini API Key" -u "me@example.com" --url "https://console.cloud.
 keeenv add --force "GEMINI_API_KEY" "new-secret-value"
 ```
 
+### Grouped entries
+
+keeenv supports entries stored inside KeePass groups by embedding the group path directly in the quoted title. Use forward slashes to delimit nested groups, followed by the entry title:
+
+- `${"Parent/Child/Entry Title".Password}`
+- `${"Infra/Databases/Production DB"."Connection String"}`
+
+Notes:
+
+- Group and entry names are matched exactly as they appear in KeePass.
+- For custom attributes that contain spaces or special characters, keep the attribute quoted as usual: `${"Group/Sub/Entry"."API Key"}`.
+- When using keeenv add with a title that includes slashes (e.g., `-t "Services/Github/Token"`), keeenv will traverse or create the groups as needed and place the entry there.
+
 ### Configuration Options
 
 The `[keepass]` section configures the Keepass database to use:
