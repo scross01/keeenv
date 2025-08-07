@@ -8,6 +8,7 @@ import os
 import re
 import shlex
 import logging
+import sys
 from typing import Optional, List
 from pykeepass import PyKeePass
 from pykeepass.exceptions import CredentialsError
@@ -613,6 +614,17 @@ def _cmd_add(
     db_path, keyfile_path = _validate_keepass_config(cfg)
 
     # Ensure we have a secret
+    if not secret:
+        # Support piping secret from stdin, e.g.,: pbpaste | keeenv add MY_API_KEY
+        try:
+            if not sys.stdin.isatty():
+                piped = sys.stdin.read()
+                if piped:
+                    secret = piped.strip("\n\r")
+        except Exception:
+            # Fall back to prompt if stdin handling fails
+            pass
+
     if not secret:
         secret = _prompt_secret(f"Enter secret for {env_var}: ").strip()
     if not secret:

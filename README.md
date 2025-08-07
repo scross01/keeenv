@@ -99,7 +99,10 @@ Examples:
 # Inline secret, default title = ENV var, default attribute = Password
 keeenv add "GEMINI_API_KEY" "xxxx1234567890"
 
-# Prompt for the secret interactively
+# Pipe secret from stdin (e.g., to pipe from clipboard)
+pbpaste | keeenv add "GEMINI_API_KEY"
+
+# Prompt for the secret interactively (no stdin and no inline value)
 keeenv add "GEMINI_API_KEY"
 
 # Custom title and username, store in custom attribute "API Key"
