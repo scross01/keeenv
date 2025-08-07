@@ -69,7 +69,15 @@ def validate_config_file(config_path: str) -> configparser.ConfigParser:
         # Validate config file path
         validated_path = PathValidator.validate_file_path(config_path, must_exist=True)
 
-        config = configparser.ConfigParser()
+        # Use a case-sensitive ConfigParser for keys to preserve ENV var casing
+        class CaseSensitiveConfigParser(configparser.ConfigParser):
+            def optionxform(self, optionstr: str) -> str:  # type: ignore[override]
+                return optionstr
+
+        config = CaseSensitiveConfigParser()
+        # Preserve case for section names as well (by default ConfigParser lowercases them on write)
+        config._dict = dict  # type: ignore[attr-defined]
+
         try:
             config.read(validated_path)
         except Exception as e:
@@ -361,6 +369,46 @@ def _create_argument_parser() -> argparse.ArgumentParser:
         help="Overwrite existing config without prompting",
     )
 
+    # add subcommand
+    add_parser = subparsers.add_parser(
+        "add",
+        help="Add a new credential to KeePass and map it in .keeenv",
+        description=(
+            "Add a new secret to the KeePass database and populate the [env] entry "
+            "in the .keeenv file. Example: keeenv add \"GEMINI_API_KEY\" \"xxxx\""
+        ),
+    )
+    add_parser.add_argument(
+        "env_var",
+        metavar="ENV_VAR",
+        help="Environment variable name to set (case preserved in .keeenv)",
+    )
+    add_parser.add_argument(
+        "secret",
+        metavar="SECRET",
+        nargs="?",
+        help="Secret value. If omitted, you will be prompted to enter it.",
+    )
+    add_parser.add_argument(
+        "-t",
+        "--title",
+        metavar="TITLE",
+        help="KeePass entry title (default: ENV_VAR)",
+    )
+    add_parser.add_argument(
+        "-u",
+        "--user",
+        metavar="USERNAME",
+        help="Optional username to set on the KeePass entry",
+    )
+    add_parser.add_argument(
+        "-a",
+        "--attribute",
+        metavar="ATTRIBUTE",
+        help='Attribute to store secret in (default: "Password"). For custom attributes, quotes are not required here.',
+    )
+    # Reuse top-level --config for .keeenv path and Keepass connection
+
     return parser
 
 
@@ -368,6 +416,14 @@ def _prompt_input(prompt: str) -> str:
     """Prompt user for input (safe for tests)."""
     try:
         return input(prompt)
+    except EOFError:
+        return ""
+
+
+def _prompt_secret(prompt: str) -> str:
+    """Prompt user for a secret value without echoing (uses getpass)."""
+    try:
+        return getpass.getpass(prompt)
     except EOFError:
         return ""
 
@@ -404,8 +460,11 @@ def _init_config_interactive(
             if choice in ("o", "overwrite"):
                 pass  # continue to write fresh
             elif choice in ("u", "update"):
-                # Read existing config
-                cfg = configparser.ConfigParser()
+                # Read existing config (preserve key case)
+                class _CasePreservingConfigParser(configparser.ConfigParser):
+                    def optionxform(self, optionstr: str) -> str:  # type: ignore[override]
+                        return optionstr
+                cfg = _CasePreservingConfigParser()
                 try:
                     cfg.read(target)
                 except Exception as e:
@@ -486,8 +545,13 @@ def _init_config_interactive(
             raise ConfigError(f"Keyfile '{key_path}' not found. Aborting.")
         PathValidator.validate_file_path(key_path, must_exist=True)
 
-    # Compose config
-    cfg = configparser.ConfigParser()
+    # Compose config (preserve key case for ENV var names)
+    class CaseSensitiveConfigParser(configparser.ConfigParser):
+        def optionxform(self, optionstr: str) -> str:  # type: ignore[override]
+            return optionstr
+
+    cfg = CaseSensitiveConfigParser()
+    cfg._dict = dict  # type: ignore[attr-defined]
     cfg[KEEPASS_SECTION] = {"database": kdbx_path}
     if keyfile:
         cfg[KEEPASS_SECTION]["keyfile"] = os.path.expanduser(keyfile)
@@ -498,6 +562,136 @@ def _init_config_interactive(
         cfg.write(f)
 
     logger.info("Created new config at %s", target)
+
+
+def _cmd_add(
+    *,
+    config_path: str,
+    env_var: str,
+    secret: Optional[str],
+    title: Optional[str],
+    username: Optional[str],
+    attribute: Optional[str],
+) -> None:
+    """
+    Implement `keeenv add` to create/update a KeePass entry and map it in .keeenv.
+
+    Behavior:
+    - env_var: environment variable name; preserve case in .keeenv [env].
+    - secret: if omitted, prompt (without echo). Required after prompting.
+    - title: KeePass entry title; default to env_var.
+    - username: optional; set Username field if provided.
+    - attribute: where to store the secret; default "Password".
+      If a standard attribute (password/username/url/notes), populate the standard field.
+      Otherwise, create/update a custom property with that name.
+    - Updates .keeenv [env] with ENV_VAR = ${"Title".Attribute} (quotes if needed).
+    """
+    logger = logging.getLogger(__name__)
+
+    # Load/validate config
+    cfg = _load_and_validate_config(config_path)
+
+    # Validate keepass connection details
+    db_path, keyfile_path = _validate_keepass_config(cfg)
+
+    # Ensure we have a secret
+    if not secret:
+        secret = _prompt_secret(f"Enter secret for {env_var}: ").strip()
+    if not secret:
+        raise ValidationError("Secret value is required")
+
+    # Determine title default
+    eff_title = title if title else env_var
+    eff_title = EntryValidator.validate_entry_title(eff_title)
+
+    # Determine attribute default and validation
+    eff_attr = attribute if attribute else "password"
+    eff_attr_valid = AttributeValidator.validate_attribute(eff_attr)
+    attr_lower = eff_attr_valid.lower()
+
+    # Open KeePass
+    password = _get_master_password(db_path)
+    kp = _open_keepass_database(db_path, password, keyfile_path)
+
+    # Create or update entry in the root group (default)
+    entry = kp.find_entries(title=eff_title, first=True)
+    if not entry:
+        # create a new entry; set username only if provided
+        entry = kp.add_entry(
+            kp.root_group,
+            title=eff_title,
+            username=username if username else "",
+            password=""  # set after based on attribute
+        )
+    else:
+        # update username if requested
+        if username is not None:
+            entry.username = username  # pyright: ignore[reportAttributeAccessIssue]
+
+    # Store the secret value into the requested place
+    if attr_lower == "password":
+        entry.password = secret  # pyright: ignore[reportAttributeAccessIssue]
+    elif attr_lower == "username":
+        entry.username = secret  # pyright: ignore[reportAttributeAccessIssue]
+    elif attr_lower == "url":
+        entry.url = secret  # pyright: ignore[reportAttributeAccessIssue]
+    elif attr_lower == "notes":
+        entry.notes = secret  # pyright: ignore[reportAttributeAccessIssue]
+    else:
+        # custom property
+        try:
+            # Prefer API method if available; else, fall back to dict-like property.
+            if hasattr(entry, "set_custom_property"):  # pyright: ignore[reportAttributeAccessIssue]
+                getattr(entry, "set_custom_property")(eff_attr_valid, secret)  # type: ignore[misc]
+            else:
+                # Ensure custom_properties exists and is a dict
+                has_props = hasattr(entry, "custom_properties")  # pyright: ignore[reportAttributeAccessIssue]
+                props_is_dict = has_props and isinstance(  # pyright: ignore[reportAttributeAccessIssue]
+                    getattr(entry, "custom_properties"), dict
+                )
+                if not props_is_dict:
+                    setattr(entry, "custom_properties", {})  # type: ignore[misc]
+                # Now set the value
+                entry.custom_properties[eff_attr_valid] = secret  # pyright: ignore[reportAttributeAccessIssue]
+        except Exception as e:
+            raise KeePassError(
+                f"Failed to set custom attribute '{eff_attr_valid}' on '{eff_title}'",
+                e,
+            )
+
+    # Save database
+    try:
+        kp.save()
+    except Exception as e:
+        raise KeePassError("Failed to save KeePass database", e)
+
+    # Update .keeenv mapping
+    if ENV_SECTION not in cfg:
+        cfg[ENV_SECTION] = {}
+
+    # Compute placeholder syntax. Always quote the title. Quote attribute if needed.
+    def needs_quote_attr(a: str) -> bool:
+        return not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", a)
+
+    placeholder_attr = f"\"{eff_attr_valid}\"" if needs_quote_attr(eff_attr_valid) else eff_attr_valid
+    placeholder = f'${{"{eff_title}".{placeholder_attr}}}'
+
+    # Preserve exact case of env_var when writing
+    cfg[ENV_SECTION][env_var] = placeholder
+
+    # Write config back to disk
+    try:
+        with open(os.path.expanduser(config_path), "w", encoding="utf-8") as f:
+            cfg.write(f)
+    except Exception as e:
+        raise ConfigError(f"Failed to write configuration file '{config_path}'", e)
+
+    logger.info(
+        "Added/updated KeePass entry '%s' and mapped %s in %s",
+        eff_title,
+        env_var,
+        config_path,
+    )
 
 
 def main() -> None:
@@ -524,6 +718,22 @@ def main() -> None:
                 bool(getattr(args, "force", False)),
             )
         except (ConfigError, ValidationError) as e:
+            _handle_error(e)
+        except Exception:
+            raise
+        return
+
+    if getattr(args, "command", None) == "add":
+        try:
+            _cmd_add(
+                config_path=getattr(args, "config", CONFIG_FILENAME),
+                env_var=args.env_var,
+                secret=getattr(args, "secret", None),
+                title=getattr(args, "title", None),
+                username=getattr(args, "user", None),
+                attribute=getattr(args, "attribute", None),
+            )
+        except (ConfigError, KeePassError, ValidationError, SecurityError) as e:
             _handle_error(e)
         except Exception:
             raise

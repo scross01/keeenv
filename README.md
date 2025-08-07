@@ -68,9 +68,40 @@ The CLI supports the following options:
   - `--force`: Overwrite an existing config without prompting.
 
 Behavior:
+
 - If no `--kdbx` is provided, you will be prompted to enter a path. If the path does not exist, you will be asked whether to create a new database at that path.
 - If a config already exists at the target path, you will be offered to Update (merge/change only the `[keepass]` fields), Overwrite (replace file), or Abort (default).
 - Paths are validated and expanded. If provided paths exist, they must be readable files.
+
+`add`: Add a new credential to KeePass and map it in `.keeenv`.
+
+- `keeenv add ENV_VAR [SECRET] [-t TITLE] [-u USERNAME] [-a ATTRIBUTE] [--config PATH]`
+  - `ENV_VAR`: Environment variable name to set. The exact case is preserved in `.keeenv`.
+  - `SECRET`: Optional secret value. If omitted, you will be prompted securely.
+  - `-t, --title TITLE`: KeePass entry Title. Defaults to `ENV_VAR`.
+  - `-u, --user USERNAME`: Optional Username for the entry.
+  - `-a, --attribute ATTRIBUTE`: Attribute in which to store the secret. Defaults to `Password`. Standard attributes: `Username`, `Password`, `URL`, `Notes`. Custom attributes are supported; quotes are not required here and will be handled appropriately in the mapping.
+  - `--config PATH`: Path to the `.keeenv` configuration (defaults to `./.keeenv`).
+
+Behavior:
+
+- Opens the KeePass database configured under `[keepass]`.
+- Creates the entry if it does not exist, or updates it if it does.
+- Stores the provided secret into the specified attribute (default `Password`), and sets `Username` if provided via `-u/--user`.
+- Updates `[env]` in `.keeenv` to map `ENV_VAR` to the entry using placeholder syntax `${"Title".Attribute}`. Attribute names that require quoting are quoted automatically. Environment variable case is preserved.
+
+Examples:
+
+```shell
+# Inline secret, default title = ENV var, default attribute = Password
+keeenv add "GEMINI_API_KEY" "xxxx1234567890"
+
+# Prompt for the secret interactively
+keeenv add "GEMINI_API_KEY"
+
+# Custom title and username, store in custom attribute "API Key"
+keeenv add -t "Gemini API Key" -u "me@example.com" -a "API Key" "GEMINI_API_KEY" "xxxx1234567890"
+```
 
 ### Configuration Options
 
@@ -139,7 +170,6 @@ Combine options:
 ```shell
 eval "$(keeenv --config ./secrets/.keeenv --strict --verbose)"
 ```
-
 
 ## Why keeenv? The challenges with .env files
 
