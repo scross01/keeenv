@@ -4,6 +4,7 @@ Input validation for keeenv - Populate environment variables from Keepass
 
 import os
 import re
+import logging
 from pathlib import Path
 from typing import Optional
 from .exceptions import (
@@ -14,6 +15,7 @@ from .exceptions import (
     KeyfileSecurityError,
 )
 
+logger = logging.getLogger(__name__)
 
 # Constants for validation limits
 MAX_TITLE_LENGTH = 255
@@ -148,7 +150,12 @@ class EntryValidator(BaseValidator):
 class AttributeValidator(BaseValidator):
     """Validates KeePass attribute names."""
 
-    SUPPORTED_ATTRIBUTES = {"username", "password", "url", "notes"}
+    # Single source of truth imported lazily to avoid circular imports at module load time.
+    # We derive the supported attribute names from core.STANDARD_ATTRS keys.
+    @staticmethod
+    def _get_supported_attributes() -> set[str]:
+        from .core import STANDARD_ATTRS  # late import to avoid circular dependency
+        return STANDARD_ATTRS
 
     @staticmethod
     def is_standard_attr(name: Optional[str]) -> bool:
@@ -158,7 +165,7 @@ class AttributeValidator(BaseValidator):
         """
         if not name or not isinstance(name, str):
             return False
-        return name.lower() in AttributeValidator.SUPPORTED_ATTRIBUTES
+        return name.lower() in AttributeValidator._get_supported_attributes()
 
     @staticmethod
     def validate_attribute(attribute: Optional[str]) -> str:
@@ -215,11 +222,7 @@ class SecurityValidator:
             db_stat = os.stat(db_path)
         except OSError as e:
             # Log an error before raising to satisfy tests expecting ERROR-level log
-            import logging as _logging  # local import to avoid unused at module scope
-
-            _logging.getLogger(__name__).error(
-                "%s %s", ERROR_CANNOT_ACCESS_DB.format(error=e), db_path
-            )
+            logger.error("%s %s", ERROR_CANNOT_ACCESS_DB.format(error=e), db_path)
             raise DatabaseSecurityError(ERROR_CANNOT_ACCESS_DB.format(error=e))
 
         # Only perform POSIX permission checks on POSIX systems
@@ -227,26 +230,16 @@ class SecurityValidator:
             # Check if database is world-readable
             if db_stat.st_mode & 0o044:
                 # Downgrade to warning (respect --quiet/--verbose)
-                import logging as _logging  # local import to avoid unused at module scope
-
-                _logging.getLogger(__name__).warning(
-                    "%s %s", ERROR_DATABASE_WORLD_READABLE, db_path
-                )
+                logger.warning("%s %s", ERROR_DATABASE_WORLD_READABLE, db_path)
 
             # Check keyfile permissions if present
             if keyfile_path:
                 try:
                     key_stat = os.stat(keyfile_path)
                     if key_stat.st_mode & 0o044:
-                        import logging as _logging  # local import to avoid unused at module scope
-
-                        _logging.getLogger(__name__).warning(
-                            "%s %s", ERROR_KEYFILE_WORLD_READABLE, keyfile_path
-                        )
+                        logger.warning("%s %s", ERROR_KEYFILE_WORLD_READABLE, keyfile_path)
                 except OSError as e:
-                    import logging as _logging  # local import to avoid unused at module scope
-
-                    _logging.getLogger(__name__).error(
+                    logger.error(
                         "%s %s",
                         ERROR_CANNOT_ACCESS_KEYFILE.format(error=e),
                         keyfile_path,
@@ -261,9 +254,7 @@ class SecurityValidator:
                     # Still attempt to access keyfile to surface access errors
                     os.stat(keyfile_path)
                 except OSError as e:
-                    import logging as _logging  # local import to avoid unused at module scope
-
-                    _logging.getLogger(__name__).error(
+                    logger.error(
                         "%s %s",
                         ERROR_CANNOT_ACCESS_KEYFILE.format(error=e),
                         keyfile_path,
