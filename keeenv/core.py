@@ -278,7 +278,7 @@ def _process_environment_variables(
     return exports
 
 
-def _handle_error(error, exit_code: int) -> None:
+def _handle_error(error) -> None:
     """Handle errors with appropriate messaging. Let the CLI decide exit codes."""
     logger = logging.getLogger(__name__)
     error_type = type(error).__name__
@@ -394,9 +394,13 @@ def _init_config_interactive(
     # Handle existing config
     if os.path.exists(target):
         if not force:
-            choice = _prompt_input(
-                f"Config '{target}' already exists. [U]pdate, [O]verwrite, [A]bort (default A): "
-            ).strip().lower()
+            choice = (
+                _prompt_input(
+                    f"Config '{target}' already exists. [U]pdate, [O]verwrite, [A]bort (default A): "
+                )
+                .strip()
+                .lower()
+            )
             if choice in ("o", "overwrite"):
                 pass  # continue to write fresh
             elif choice in ("u", "update"):
@@ -412,13 +416,19 @@ def _init_config_interactive(
                 current_db = cfg[KEEPASS_SECTION].get("database")
                 current_key = cfg[KEEPASS_SECTION].get("keyfile")
                 if not kdbx:
-                    kdbx = _prompt_input(
-                        f"Path to KeePass .kdbx file [{current_db or ''}]: "
-                    ).strip() or current_db
+                    kdbx = (
+                        _prompt_input(
+                            f"Path to KeePass .kdbx file [{current_db or ''}]: "
+                        ).strip()
+                        or current_db
+                    )
                 if not keyfile:
-                    keyfile = _prompt_input(
-                        f"Path to key file (optional) [{current_key or ''}]: "
-                    ).strip() or current_key
+                    keyfile = (
+                        _prompt_input(
+                            f"Path to key file (optional) [{current_key or ''}]: "
+                        ).strip()
+                        or current_key
+                    )
                 # Validate kdbx: must exist; abort if missing
                 if not kdbx:
                     raise ConfigError("No database path provided.")
@@ -464,7 +474,9 @@ def _init_config_interactive(
     PathValidator.validate_file_path(kdbx_path, must_exist=True)
 
     if keyfile is None:
-        entered = _prompt_input("Path to key file (optional, press Enter to skip): ").strip()
+        entered = _prompt_input(
+            "Path to key file (optional, press Enter to skip): "
+        ).strip()
         keyfile = entered or None
 
     if keyfile:
@@ -512,7 +524,7 @@ def main() -> None:
                 bool(getattr(args, "force", False)),
             )
         except (ConfigError, ValidationError) as e:
-            _handle_error(e, 2)
+            _handle_error(e)
         except Exception:
             raise
         return
@@ -543,13 +555,13 @@ def main() -> None:
             print("\n".join(exports))
 
     except ConfigError as e:
-        _handle_error(e, 2)
+        _handle_error(e)
     except KeePassError as e:
-        _handle_error(e, 3)
+        _handle_error(e)
     except ValidationError as e:
-        _handle_error(e, 4)
+        _handle_error(e)
     except SecurityError as e:
-        _handle_error(e, 5)
+        _handle_error(e)
     except Exception:
         # Bubble unexpected errors to the CLI layer as well
         raise

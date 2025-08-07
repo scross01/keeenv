@@ -318,8 +318,12 @@ class TestMainFunction:
 
         mock_path_validator.return_value = Path("tests/secrets.kdbx")
         mock_getpass.return_value = "invalid"
-        mock_pykeepass.side_effect = Exception("Failed to open KeePass database: Invalid credentials")
+        mock_pykeepass.side_effect = Exception(
+            "Failed to open KeePass database: Invalid credentials"
+        )
 
         # core.main re-raises the original exception via _handle_error; the wrapper keeenv.main handles exit codes.
-        with pytest.raises(Exception, match="Failed to open KeePass database: Invalid credentials"):
+        with pytest.raises(
+            Exception, match="Failed to open KeePass database: Invalid credentials"
+        ):
             main()

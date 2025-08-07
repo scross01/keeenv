@@ -186,7 +186,8 @@ class TestSecurityValidator:
             with caplog.at_level("WARNING"):
                 SecurityValidator.validate_database_security(tmp.name)
                 assert any(
-                    "Database file is world-readable" in rec.message for rec in caplog.records
+                    "Database file is world-readable" in rec.message
+                    for rec in caplog.records
                 )
 
     def test_validate_database_security_with_keyfile(self):
@@ -215,7 +216,8 @@ class TestSecurityValidator:
                         db_file.name, key_file.name
                     )
                     assert any(
-                        "Keyfile is world-readable" in rec.message for rec in caplog.records
+                        "Keyfile is world-readable" in rec.message
+                        for rec in caplog.records
                     )
 
     @patch("os.stat")
@@ -225,7 +227,9 @@ class TestSecurityValidator:
 
         # Capture logs specifically from keeenv.validation logger at ERROR level
         with caplog.at_level("ERROR", logger="keeenv.validation"):
-            with pytest.raises(DatabaseSecurityError, match="Cannot access database file"):
+            with pytest.raises(
+                DatabaseSecurityError, match="Cannot access database file"
+            ):
                 SecurityValidator.validate_database_security("/nonexistent/path")
 
         # Validate that an error-level log was produced for access failure

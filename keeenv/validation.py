@@ -206,6 +206,7 @@ class SecurityValidator:
         except OSError as e:
             # Log an error before raising to satisfy tests expecting ERROR-level log
             import logging as _logging  # local import to avoid unused at module scope
+
             _logging.getLogger(__name__).error(
                 "%s %s", ERROR_CANNOT_ACCESS_DB.format(error=e), db_path
             )
@@ -234,8 +235,11 @@ class SecurityValidator:
                         )
                 except OSError as e:
                     import logging as _logging  # local import to avoid unused at module scope
+
                     _logging.getLogger(__name__).error(
-                        "%s %s", ERROR_CANNOT_ACCESS_KEYFILE.format(error=e), keyfile_path
+                        "%s %s",
+                        ERROR_CANNOT_ACCESS_KEYFILE.format(error=e),
+                        keyfile_path,
                     )
                     raise KeyfileSecurityError(
                         ERROR_CANNOT_ACCESS_KEYFILE.format(error=e)
@@ -248,8 +252,11 @@ class SecurityValidator:
                     os.stat(keyfile_path)
                 except OSError as e:
                     import logging as _logging  # local import to avoid unused at module scope
+
                     _logging.getLogger(__name__).error(
-                        "%s %s", ERROR_CANNOT_ACCESS_KEYFILE.format(error=e), keyfile_path
+                        "%s %s",
+                        ERROR_CANNOT_ACCESS_KEYFILE.format(error=e),
+                        keyfile_path,
                     )
                     raise KeyfileSecurityError(
                         ERROR_CANNOT_ACCESS_KEYFILE.format(error=e)
