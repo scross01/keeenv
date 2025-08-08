@@ -1,5 +1,9 @@
 # Change Log
 
+- Added `eval` subcommand to generate the environment variables.
+- Default command now just shows the extended help message.
+
+
 ## v0.2.0
 
 - Added `init` subcommand to configure the .keeenv file and optionally create a new KeePass kdbx

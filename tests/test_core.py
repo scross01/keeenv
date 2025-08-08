@@ -119,7 +119,7 @@ class TestMainFunction:
     @patch("keeenv.core.PathValidator.validate_file_path")
     @patch("keeenv.validation.SecurityValidator.validate_database_security")
     @patch("keeenv.core.getpass.getpass")
-    @patch("sys.argv", ["keeenv"])
+    @patch("sys.argv", ["keeenv", "eval"])
     def test_main_success(
         self,
         mock_getpass,
@@ -180,7 +180,7 @@ class TestMainFunction:
                 assert len(export_calls) > 0
 
     @patch("keeenv.core.KeeenvConfig")
-    @patch("sys.argv", ["keeenv"])
+    @patch("sys.argv", ["keeenv", "eval"])
     def test_main_config_error(self, mock_config_class):
         """Test main function with config error (updated for new CLI behavior)"""
         # Mock the KeeenvConfig instance to raise a ConfigError
@@ -199,7 +199,7 @@ class TestMainFunctionWithPasswordLogic:
     @patch("keeenv.core.KeeenvConfig")
     @patch("keeenv.core.PathValidator.validate_file_path")
     @patch("keeenv.validation.SecurityValidator.validate_database_security")
-    @patch("sys.argv", ["keeenv"])
+    @patch("sys.argv", ["keeenv", "eval"])
     def test_main_success_without_password(
         self,
         mock_security,
@@ -260,7 +260,7 @@ class TestMainFunctionWithPasswordLogic:
     @patch("keeenv.core.PathValidator.validate_file_path")
     @patch("keeenv.validation.SecurityValidator.validate_database_security")
     @patch("keeenv.core.getpass.getpass")
-    @patch("sys.argv", ["keeenv"])
+    @patch("sys.argv", ["keeenv", "eval"])
     def test_main_success_with_password_required(
         self,
         mock_getpass,
@@ -329,7 +329,7 @@ class TestMainFunctionWithPasswordLogic:
     @patch("keeenv.core.PathValidator.validate_file_path")
     @patch("keeenv.validation.SecurityValidator.validate_database_security")
     @patch("keeenv.core.getpass.getpass")
-    @patch("sys.argv", ["keeenv"])
+    @patch("sys.argv", ["keeenv", "eval"])
     def test_main_password_prompt_called_only_when_needed(
         self,
         mock_getpass,
@@ -425,7 +425,11 @@ class TestCmdAddFunctionWithPasswordLogic:
 
         # Mock KeePassManager and its methods
         mock_kp_manager = Mock(spec=KeePassManager)
-        mock_kp_manager.find_entry.return_value = (None, None, "TEST_VAR")  # entry, group, title
+        mock_kp_manager.find_entry.return_value = (
+            None,
+            None,
+            "TEST_VAR",
+        )  # entry, group, title
         mock_kp_manager.create_entry.return_value = Mock()
         mock_kp_manager.set_entry_attribute = Mock()
         mock_kp_manager.save_database = Mock()
@@ -451,7 +455,9 @@ class TestCmdAddFunctionWithPasswordLogic:
         mock_kp_manager_class.assert_called_once_with("tests/secrets.kdbx", None)
         # Should try to connect without password first
         mock_kp_manager.connect.assert_called_once_with(password=None)
-        mock_kp_manager.find_entry.assert_called_once_with("TEST_VAR", create_if_missing=True)
+        mock_kp_manager.find_entry.assert_called_once_with(
+            "TEST_VAR", create_if_missing=True
+        )
         mock_kp_manager.create_entry.assert_called_once()
         mock_kp_manager.set_entry_attribute.assert_called_once()
         mock_kp_manager.save_database.assert_called_once()
@@ -492,7 +498,11 @@ class TestCmdAddFunctionWithPasswordLogic:
 
         # Mock KeePassManager and its methods
         mock_kp_manager = Mock(spec=KeePassManager)
-        mock_kp_manager.find_entry.return_value = (None, None, "TEST_VAR")  # entry, group, title
+        mock_kp_manager.find_entry.return_value = (
+            None,
+            None,
+            "TEST_VAR",
+        )  # entry, group, title
         mock_kp_manager.create_entry.return_value = Mock()
         mock_kp_manager.set_entry_attribute = Mock()
         mock_kp_manager.save_database = Mock()
@@ -527,7 +537,9 @@ class TestCmdAddFunctionWithPasswordLogic:
         assert mock_kp_manager.connect.call_count == 2
         mock_kp_manager.connect.assert_any_call(password=None)
         mock_kp_manager.connect.assert_any_call("password123")
-        mock_kp_manager.find_entry.assert_called_once_with("TEST_VAR", create_if_missing=True)
+        mock_kp_manager.find_entry.assert_called_once_with(
+            "TEST_VAR", create_if_missing=True
+        )
         mock_kp_manager.create_entry.assert_called_once()
         mock_kp_manager.set_entry_attribute.assert_called_once()
         mock_kp_manager.save_database.assert_called_once()
@@ -565,7 +577,11 @@ class TestCmdAddFunctionWithPasswordLogic:
 
         # Mock KeePassManager and its methods
         mock_kp_manager = Mock(spec=KeePassManager)
-        mock_kp_manager.find_entry.return_value = (None, None, "TEST_VAR")  # entry, group, title
+        mock_kp_manager.find_entry.return_value = (
+            None,
+            None,
+            "TEST_VAR",
+        )  # entry, group, title
         mock_kp_manager.create_entry.return_value = Mock()
         mock_kp_manager.set_entry_attribute = Mock()
         mock_kp_manager.save_database = Mock()
@@ -598,7 +614,9 @@ class TestCmdAddFunctionWithPasswordLogic:
         # Note: We can't directly mock getpass here since it's called inside _cmd_add
         # But we can verify that connect was only called once with None
         assert mock_kp_manager.connect.call_count == 1
-        mock_kp_manager.find_entry.assert_called_once_with("TEST_VAR", create_if_missing=True)
+        mock_kp_manager.find_entry.assert_called_once_with(
+            "TEST_VAR", create_if_missing=True
+        )
         mock_kp_manager.create_entry.assert_called_once()
         mock_kp_manager.set_entry_attribute.assert_called_once()
         mock_kp_manager.save_database.assert_called_once()

@@ -65,19 +65,12 @@ class KeePassManager:
             KeePassError: If database opening fails
         """
         try:
-            # Try to connect without password first if none provided
-            if password is None:
-                self.kp = self._pykeepass_class(
-                    self.db_path, password=None, keyfile=self.keyfile_path
-                )
-                self.password = ""
-                self._is_connected = True
-            else:
-                self.kp = self._pykeepass_class(
-                    self.db_path, password=password, keyfile=self.keyfile_path
-                )
-                self.password = password
-                self._is_connected = True
+            # Try to connect with provided password (or None if no password provided)
+            self.kp = self._pykeepass_class(
+                self.db_path, password=password, keyfile=self.keyfile_path
+            )
+            self.password = password or ""
+            self._is_connected = True
         except CredentialsError:
             raise KeePassCredentialsError(ERROR_INVALID_PASSWORD_OR_KEYFILE)
         except Exception as e:

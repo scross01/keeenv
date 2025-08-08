@@ -59,7 +59,7 @@ def _create_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="keeenv",
         description="Set local environment variables from KeePass database",
-        epilog="Example: eval $(keeenv)",
+        epilog="Example: eval $(keeenv eval)",
     )
 
     verbosity = parser.add_mutually_exclusive_group()
@@ -95,6 +95,13 @@ def _create_argument_parser() -> argparse.ArgumentParser:
 
     # Subcommands
     subparsers = parser.add_subparsers(dest="command")
+
+    # eval subcommand
+    subparsers.add_parser(
+        "eval",
+        help="Evaluate and export environment variables",
+        description="Export environment variables from KeePass database",
+    )
 
     # init subcommand
     init_parser = subparsers.add_parser(
@@ -421,7 +428,7 @@ def _cmd_add(
 
     # Use KeePassManager for database operations
     kp_manager = KeePassManager(db_path, keyfile_path)
-    
+
     # Try to connect without password first, only prompt if needed
     try:
         kp_manager.connect(password=None)
@@ -512,6 +519,11 @@ def main() -> None:
     parser = _create_argument_parser()
     args = parser.parse_args()
 
+    # If no arguments provided, show extended help
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(0)
+
     # Configure logging level based on verbosity flags
     if getattr(args, "verbose", False):
         logging.basicConfig(level=logging.DEBUG)
@@ -569,7 +581,7 @@ def main() -> None:
 
         # Use KeePassManager for database operations
         kp_manager = KeePassManager(validated_db_path, validated_keyfile_path)
-        
+
         # Try to connect without password first, only prompt if needed
         try:
             kp_manager.connect(password=None)

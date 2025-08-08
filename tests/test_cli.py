@@ -54,7 +54,7 @@ def test_version_shows_package_version():
     assert proc.stderr == ""
 
 
-def test_logging_quiet_sets_error_level(tmp_path: Path):
+def test_eval_logging_quiet_sets_error_level(tmp_path: Path):
     # Minimal config using a missing DB path to provoke an error
     cfg = write_config(
         tmp_path,
@@ -66,13 +66,13 @@ def test_logging_quiet_sets_error_level(tmp_path: Path):
         FOO = ${"Entry".password}
         """,
     )
-    proc = run_cli(["--config", str(cfg), "--quiet"])
+    proc = run_cli(["--config", str(cfg), "--quiet", "eval"])
     # With quiet, we still expect failure (missing DB), but warnings should be suppressed
     assert proc.returncode == 1
     assert "Warning" not in proc.stderr
 
 
-def test_logging_verbose_allows_debug(tmp_path: Path):
+def test_eval_logging_verbose_allows_debug(tmp_path: Path):
     cfg = write_config(
         tmp_path,
         """
@@ -83,13 +83,13 @@ def test_logging_verbose_allows_debug(tmp_path: Path):
         FOO = ${"Entry".password}
         """,
     )
-    proc = run_cli(["--config", str(cfg), "--verbose"])
+    proc = run_cli(["--config", str(cfg), "--verbose", "eval"])
     # Missing DB should fail, but verbose should emit more detail to stderr
     assert proc.returncode == 1
     assert proc.stderr != ""
 
 
-def test_config_flag_uses_alternate_path(tmp_path: Path):
+def test_eval_config_flag_uses_alternate_path(tmp_path: Path):
     # Create config in a non-default path and ensure --config works
     cfg = write_config(
         tmp_path,
@@ -102,14 +102,14 @@ def test_config_flag_uses_alternate_path(tmp_path: Path):
         """,
         name="custom.keeenv",
     )
-    proc = run_cli(["--config", str(cfg)])
+    proc = run_cli(["--config", str(cfg), "eval"])
     # Missing db -> failure, but confirms --config path is accepted and read
     assert proc.returncode == 1
-    # stdout should be empty since we didn't produce exports
+    # stdout should be empty since we didn't produce exports (default behavior shows help)
     assert proc.stdout.strip() == ""
 
 
-def test_strict_mode_fails_on_unresolved_placeholder(tmp_path: Path):
+def test_eval_strict_mode_fails_on_unresolved_placeholder(tmp_path: Path):
     # Strict mode should raise -> exit 1; stderr should show an error
     cfg = write_config(
         tmp_path,
@@ -121,12 +121,12 @@ def test_strict_mode_fails_on_unresolved_placeholder(tmp_path: Path):
         FOO = ${"Nonexistent".password}
         """,
     )
-    proc = run_cli(["--config", str(cfg), "--strict"])
+    proc = run_cli(["--config", str(cfg), "--strict", "eval"])
     assert proc.returncode == 1
     assert proc.stderr != ""
 
 
-def test_non_strict_blanks_unresolved_placeholders(tmp_path: Path):
+def test_eval_non_strict_blanks_unresolved_placeholders(tmp_path: Path):
     # Non-strict should not crash due to unresolved placeholders during substitution.
     # Because db is missing it will still fail; this verifies non-strict invocation path.
     cfg = write_config(
@@ -139,8 +139,10 @@ def test_non_strict_blanks_unresolved_placeholders(tmp_path: Path):
         FOO = ${"Nonexistent".password}
         """,
     )
-    proc = run_cli(["--config", str(cfg)])
+    proc = run_cli(["--config", str(cfg), "eval"])
     assert proc.returncode == 1
+    assert "database" in proc.stderr.lower() or "missing" in proc.stderr.lower()
+    assert "unresolved" not in proc.stderr.lower()
 
 
 # --- New tests for `keeenv init` subcommand ---
@@ -237,9 +239,9 @@ def test_add_prompts_for_secret_and_preserves_env_case(tmp_path: Path, monkeypat
     input_text = "masterpass\nsupersecret\n"
     proc = run_cli(
         [
-            "add",
             "--config",
             str(cfg_path),
+            "add",
             "My_Var_MixedCase",
         ],
         cwd=tmp_path,
@@ -275,9 +277,9 @@ def test_add_existing_mapping_prompts_without_force(tmp_path: Path):
     input_text = "masterpass\n"
     proc = run_cli(
         [
-            "add",
             "--config",
             str(cfg_path),
+            "add",
             "EXISTING",
             "newsecret",
         ],
@@ -298,9 +300,9 @@ def test_add_with_all_options_builds_placeholder_format(tmp_path: Path):
     # Provide secret inline; choose custom attribute with space and a different title
     proc = run_cli(
         [
-            "add",
             "--config",
             str(cfg_path),
+            "add",
             "-t",
             "Gemini API Key",
             "-u",
@@ -332,9 +334,9 @@ def test_add_existing_mapping_with_force_skips_prompt(tmp_path: Path):
     )
     proc = run_cli(
         [
-            "add",
             "--config",
             str(cfg_path),
+            "add",
             "--force",
             "EXISTING",
             "whatever",
@@ -352,9 +354,9 @@ def test_add_inline_secret_default_title_is_env_var(tmp_path: Path):
     )
     proc = run_cli(
         [
-            "add",
             "--config",
             str(cfg_path),
+            "add",
             "GEMINI_API_KEY",
             "xxxx",
         ]
