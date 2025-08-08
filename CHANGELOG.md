@@ -1,5 +1,7 @@
 # Change Log
 
+## v0.3.0
+
 - Added `eval` subcommand to generate the environment variables.
 - Default command now just shows the extended help message.
 - Added `list` subcommand to list just the configured variable names without evaluating them.
