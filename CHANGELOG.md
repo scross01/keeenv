@@ -2,7 +2,8 @@
 
 - Added `eval` subcommand to generate the environment variables.
 - Default command now just shows the extended help message.
-
+- Added `list` subcommand to list just the configured variable names without evaluating them.
+- Added `run` subcommand to execute commands with environment variables present.
 
 ## v0.2.0
 

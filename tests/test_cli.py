@@ -363,3 +363,315 @@ def test_add_inline_secret_default_title_is_env_var(tmp_path: Path):
     )
     # Expect non-zero because DB is missing, but the CLI path should be valid.
     assert proc.returncode != 0 or proc.stderr != ""
+
+
+# --- Tests for `keeenv list` subcommand ---
+
+
+def test_list_shows_env_var_names(tmp_path: Path):
+    """Test that `keeenv list` displays environment variable names from [env] section."""
+    cfg_path = tmp_path / ".keeenv"
+    cfg_path.write_text(
+        textwrap.dedent(
+            """
+            [keepass]
+            database = ./test.kdbx
+            
+            [env]
+            API_KEY = ${"MyAPI".password}
+            DATABASE_URL = ${"DB".url}
+            SECRET_TOKEN = ${"Token".notes}
+            """
+        ).strip(),
+        encoding="utf-8",
+    )
+
+    proc = run_cli(["--config", str(cfg_path), "list"])
+
+    # Should succeed and output the environment variable names
+    assert proc.returncode == 0
+    output = proc.stdout.strip().split("\n")
+    assert "API_KEY" in output
+    assert "DATABASE_URL" in output
+    assert "SECRET_TOKEN" in output
+    # Should not show the values, just the names
+    assert "${" not in proc.stdout
+    assert "password" not in proc.stdout
+    assert "url" not in proc.stdout
+    assert "notes" not in proc.stdout
+
+
+def test_list_empty_env_section_shows_message(tmp_path: Path):
+    """Test that `keeenv list` shows appropriate message when [env] section is empty."""
+    cfg_path = tmp_path / ".keeenv"
+    cfg_path.write_text(
+        textwrap.dedent(
+            """
+            [keepass]
+            database = ./test.kdbx
+            
+            [env]
+            """
+        ).strip(),
+        encoding="utf-8",
+    )
+
+    proc = run_cli(["--config", str(cfg_path), "list"])
+
+    # Should succeed and show "No environment variables found"
+    assert proc.returncode == 0
+    assert "No environment variables found" in proc.stdout
+
+
+def test_list_no_env_section_shows_message(tmp_path: Path):
+    """Test that `keeenv list` shows appropriate message when [env] section is missing."""
+    cfg_path = tmp_path / ".keeenv"
+    cfg_path.write_text(
+        textwrap.dedent(
+            """
+            [keepass]
+            database = ./test.kdbx
+            """
+        ).strip(),
+        encoding="utf-8",
+    )
+
+    proc = run_cli(["--config", str(cfg_path), "list"])
+
+    # Should succeed and show "No environment variables found"
+    assert proc.returncode == 0
+    assert "No environment variables found" in proc.stdout
+
+
+def test_list_config_file_not_found_shows_error():
+    """Test that `keeenv list` shows error when config file doesn't exist."""
+    proc = run_cli(["--config", "/nonexistent/path.keeenv", "list"])
+
+    # Should succeed but show error message
+    assert proc.returncode == 0
+    assert "Configuration file not found" in proc.stdout
+
+
+def test_list_preserves_variable_case(tmp_path: Path):
+    """Test that `keeenv list` preserves the case of environment variable names."""
+    cfg_path = tmp_path / ".keeenv"
+    cfg_path.write_text(
+        textwrap.dedent(
+            """
+            [keepass]
+            database = ./test.kdbx
+            
+            [env]
+            MixedCase_VAR = ${"Entry".password}
+            ALL_CAPS = ${"Entry".password}
+            snake_case = ${"Entry".password}
+            """
+        ).strip(),
+        encoding="utf-8",
+    )
+
+    proc = run_cli(["--config", str(cfg_path), "list"])
+
+    # Should succeed and preserve case
+    assert proc.returncode == 0
+    output = proc.stdout.strip().split("\n")
+    assert "MixedCase_VAR" in output
+    assert "ALL_CAPS" in output
+    assert "snake_case" in output
+
+
+def test_list_multiple_variables_each_on_new_line(tmp_path: Path):
+    """Test that `keeenv list` shows each variable name on a separate line."""
+    cfg_path = tmp_path / ".keeenv"
+    cfg_path.write_text(
+        textwrap.dedent(
+            """
+            [keepass]
+            database = ./test.kdbx
+            
+            [env]
+            VAR1 = ${"Entry1".password}
+            VAR2 = ${"Entry2".password}
+            VAR3 = ${"Entry3".password}
+            """
+        ).strip(),
+        encoding="utf-8",
+    )
+
+
+# --- Tests for `keeenv run` subcommand ---
+
+
+def test_run_executes_command_with_env_vars(tmp_path: Path):
+    """Test that `keeenv run` correctly parses arguments and attempts to execute the command."""
+    # Create a dummy database file (invalid KeePass format)
+    kdbx = tmp_path / "test.kdbx"
+    kdbx.write_text("dummy")
+
+    cfg_path = tmp_path / ".keeenv"
+    cfg_path.write_text(
+        textwrap.dedent(
+            f"""
+            [keepass]
+            database = {kdbx}
+            
+            [env]
+            TEST_VAR = test_value
+            ANOTHER_VAR = another_value
+            """
+        ).strip(),
+        encoding="utf-8",
+    )
+
+    proc = run_cli(
+        ["--config", str(cfg_path), "run", "echo", "test-output"], cwd=tmp_path
+    )
+
+    # Should fail due to invalid database, but should not show export commands (that's eval behavior)
+    assert proc.returncode != 0
+    assert "export" not in proc.stdout
+    # Should show some error about the database
+    assert "KeePassError" in proc.stderr or "PathValidationError" in proc.stderr
+
+
+def test_run_executes_command_with_env_vars_quoted_args(tmp_path: Path):
+    """Test that `keeenv run` correctly parses quoted arguments."""
+    # Create a dummy database file (invalid KeePass format)
+    kdbx = tmp_path / "test.kdbx"
+    kdbx.write_text("dummy")
+
+    cfg_path = tmp_path / ".keeenv"
+    cfg_path.write_text(
+        textwrap.dedent(
+            f"""
+            [keepass]
+            database = {kdbx}
+            
+            [env]
+            TEST_VAR = test_value
+            """
+        ).strip(),
+        encoding="utf-8",
+    )
+
+    proc = run_cli(
+        ["--config", str(cfg_path), "run", "echo", '"hello world"'], cwd=tmp_path
+    )
+
+    # Should fail due to invalid database, but should not show export commands
+    assert proc.returncode != 0
+    assert "export" not in proc.stdout
+    # Should show some error about the database
+    assert "KeePassError" in proc.stderr or "PathValidationError" in proc.stderr
+
+
+def test_run_executes_complex_command(tmp_path: Path):
+    """Test that `keeenv run` correctly parses complex commands with multiple arguments."""
+    # Create a dummy database file (invalid KeePass format)
+    kdbx = tmp_path / "test.kdbx"
+    kdbx.write_text("dummy")
+
+    cfg_path = tmp_path / ".keeenv"
+    cfg_path.write_text(
+        textwrap.dedent(
+            f"""
+            [keepass]
+            database = {kdbx}
+            
+            [env]
+            API_KEY = secret123
+            BASE_URL = https://api.example.com
+            """
+        ).strip(),
+        encoding="utf-8",
+    )
+
+    proc = run_cli(
+        [
+            "--config",
+            str(cfg_path),
+            "run",
+            "echo",
+            "API_KEY:",
+            "$API_KEY",
+            "URL:",
+            "$BASE_URL",
+        ],
+        cwd=tmp_path,
+    )
+
+    # Should fail due to invalid database, but should not show export commands
+    assert proc.returncode != 0
+    assert "export" not in proc.stdout
+    # Should show some error about the database
+    assert "KeePassError" in proc.stderr or "PathValidationError" in proc.stderr
+
+
+def test_run_missing_config_shows_error():
+    """Test that `keeenv run` shows error when config file doesn't exist."""
+    proc = run_cli(["--config", "/nonexistent/path.keeenv", "run", "echo", "test"])
+
+    # Should fail and show error message
+    assert proc.returncode != 0
+    assert "Configuration file" in proc.stderr and "not found" in proc.stderr
+
+
+def test_run_with_verbose_logging(tmp_path: Path):
+    """Test that `keeenv run` with --verbose shows debug information."""
+    # Create a dummy database file (invalid KeePass format)
+    kdbx = tmp_path / "test.kdbx"
+    kdbx.write_text("dummy")
+
+    cfg_path = tmp_path / ".keeenv"
+    cfg_path.write_text(
+        textwrap.dedent(
+            f"""
+            [keepass]
+            database = {kdbx}
+            
+            [env]
+            TEST_VAR = test_value
+            """
+        ).strip(),
+        encoding="utf-8",
+    )
+
+    proc = run_cli(
+        ["--config", str(cfg_path), "--verbose", "run", "echo", "test"], cwd=tmp_path
+    )
+
+    # Should fail due to invalid database, but verbose mode should show debug information
+    assert proc.returncode != 0
+    assert "test" not in proc.stdout  # Command shouldn't execute successfully
+    # Verbose mode should show debug information in stderr
+    assert proc.stderr != ""
+    # Should show some error about the database
+    assert "KeePassError" in proc.stderr or "PathValidationError" in proc.stderr
+
+
+def test_run_empty_env_section_executes_command(tmp_path: Path):
+    """Test that `keeenv run` still attempts to execute command even with empty [env] section."""
+    # Create a dummy database file (invalid KeePass format)
+    kdbx = tmp_path / "test.kdbx"
+    kdbx.write_text("dummy")
+
+    cfg_path = tmp_path / ".keeenv"
+    cfg_path.write_text(
+        textwrap.dedent(
+            f"""
+            [keepass]
+            database = {kdbx}
+            
+            [env]
+            """
+        ).strip(),
+        encoding="utf-8",
+    )
+
+    proc = run_cli(["--config", str(cfg_path), "run", "echo", "test"], cwd=tmp_path)
+
+    # Should fail due to invalid database, but should attempt to execute the command
+    assert proc.returncode != 0
+    assert "export" not in proc.stdout
+    # Should show some error about the database
+    assert "KeePassError" in proc.stderr or "PathValidationError" in proc.stderr

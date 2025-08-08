@@ -17,6 +17,7 @@ from keeenv.constants import (
 )
 from keeenv.exceptions import (
     ConfigError,
+    ConfigFileNotFoundError,
     KeePassError,
     KeePassCredentialsError,
     ValidationError,
@@ -94,13 +95,32 @@ def _create_argument_parser() -> argparse.ArgumentParser:
     )
 
     # Subcommands
-    subparsers = parser.add_subparsers(dest="command")
+    subparsers = parser.add_subparsers(dest="subcommand", help="Subcommands")
 
     # eval subcommand
     subparsers.add_parser(
         "eval",
         help="Evaluate and export environment variables",
         description="Export environment variables from KeePass database",
+    )
+
+    # list subcommand
+    subparsers.add_parser(
+        "list",
+        help="List environment variable names from .keeenv",
+        description="List all environment variable names defined in the [env] section of .keeenv",
+    )
+
+    # run subcommand
+    run_parser = subparsers.add_parser(
+        "run",
+        help="Run a command with environment variables set from .keeenv",
+        description="Execute a command with environment variables populated from KeePass database",
+    )
+    run_parser.add_argument(
+        "command",
+        nargs="+",
+        help="Command and arguments to execute",
     )
 
     # init subcommand
@@ -513,6 +533,121 @@ def _cmd_add(
     )
 
 
+def _cmd_list(*, config_path: str) -> None:
+    """
+    Implement `keeenv list` to display environment variable names from .keeenv.
+
+    Behavior:
+    - Read the .keeenv configuration file
+    - Extract and display all environment variable names from the [env] section
+    - No KeePass database connection or value evaluation is performed
+    """
+    logger = logging.getLogger(__name__)
+
+    try:
+        # Load configuration file
+        config_manager = KeeenvConfig(config_path)
+
+        # Get environment variables from [env] section
+        env_vars = config_manager.get_env_vars()
+
+        if env_vars:
+            # Print each environment variable name on a separate line
+            for var_name in env_vars.keys():
+                print(var_name)
+            logger.info(
+                "Listed %d environment variable(s) from %s", len(env_vars), config_path
+            )
+        else:
+            print("No environment variables found in [env] section")
+            logger.info("No environment variables found in %s", config_path)
+
+    except ConfigFileNotFoundError:
+        print(f"Configuration file not found: {config_path}")
+        logger.warning("Configuration file not found: %s", config_path)
+    except ConfigError as e:
+        print(f"Configuration error: {e}")
+        logger.error("Configuration error: %s", e)
+
+
+def _cmd_run(*, config_path: str, command: list[str]) -> None:
+    """
+    Implement `keeenv run` to execute a command with environment variables set from .keeenv.
+
+    Behavior:
+    - Load environment variables from KeePass database
+    - Execute the specified command in a child process with those environment variables
+    - Forward the exit code of the child process
+    """
+    import subprocess
+    import os
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        # Load and validate configuration
+        config_manager = KeeenvConfig(config_path)
+        config = config_manager.get_config()
+
+        # Validate Keepass configuration and get paths
+        validated_db_path, validated_keyfile_path = (
+            config_manager.validate_keepass_config(config)
+        )
+
+        # Use KeePassManager for database operations
+        kp_manager = KeePassManager(validated_db_path, validated_keyfile_path)
+
+        # Try to connect without password first, only prompt if needed
+        try:
+            kp_manager.connect(password=None)
+        except KeePassCredentialsError:
+            # Database requires password, prompt for it
+            password = _get_master_password(validated_db_path)
+            kp_manager.connect(password)
+
+        try:
+            # Process environment variables using KeePassManager
+            env_vars = {}
+            if ENV_SECTION in config:
+                env_config = config[ENV_SECTION]
+                for var_name, value_template in env_config.items():
+                    # Use strict mode for run command to ensure all placeholders are resolved
+                    final_value = kp_manager.substitute_placeholders(
+                        value_template, strict=True
+                    )
+                    env_vars[var_name.upper()] = final_value
+
+            # Execute the command with the environment variables
+            logger.info("Executing command: %s", " ".join(command))
+            logger.info("Environment variables: %s", env_vars)
+
+            # Create a copy of the current environment and add our variables
+            full_env = os.environ.copy()
+            full_env.update(env_vars)
+
+            # Execute the command
+            result = subprocess.run(command, env=full_env, shell=True)
+
+            # Forward the exit code
+            sys.exit(result.returncode)
+
+        finally:
+            # Ensure database connection is closed
+            kp_manager.disconnect()
+
+    except ConfigError as e:
+        _handle_error(e)
+    except KeePassError as e:
+        _handle_error(e)
+    except ValidationError as e:
+        _handle_error(e)
+    except SecurityError as e:
+        _handle_error(e)
+    except Exception as e:
+        logger.error("Unexpected error executing command: %s", e)
+        sys.exit(1)
+
+
 def main() -> None:
     """Main function to read config, fetch secrets, and set the environment."""
     # Parse command line arguments
@@ -533,7 +668,7 @@ def main() -> None:
         logging.basicConfig(level=logging.WARNING)
 
     # Handle subcommands
-    if getattr(args, "command", None) == "init":
+    if getattr(args, "subcommand", None) == "init":
         try:
             _init_config_interactive(
                 args.config,
@@ -547,7 +682,7 @@ def main() -> None:
             raise
         return
 
-    if getattr(args, "command", None) == "add":
+    if getattr(args, "subcommand", None) == "add":
         try:
             _cmd_add(
                 config_path=args.config,
@@ -560,6 +695,25 @@ def main() -> None:
                 attribute=getattr(args, "attribute", None),
                 force=bool(getattr(args, "force", False)),
             )
+        except (ConfigError, KeePassError, ValidationError, SecurityError) as e:
+            _handle_error(e)
+        except Exception:
+            raise
+        return
+
+    if getattr(args, "subcommand", None) == "list":
+        try:
+            _cmd_list(config_path=args.config)
+        except (ConfigError, ConfigFileNotFoundError) as e:
+            _handle_error(e)
+        except Exception:
+            raise
+        return
+
+    # Check if args.subcommand is the string "run" (subcommand name)
+    if getattr(args, "subcommand", None) == "run":
+        try:
+            _cmd_run(config_path=args.config, command=args.command)
         except (ConfigError, KeePassError, ValidationError, SecurityError) as e:
             _handle_error(e)
         except Exception:

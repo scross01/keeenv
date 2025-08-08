@@ -59,6 +59,84 @@ The CLI supports the following options:
 
 #### Subcommands
 
+`eval`: Evaluate and export environment variables from KeePass database.
+
+- `keeenv [--config PATH] [--strict] [--quiet | --verbose] eval`
+  - `--config PATH`: Path to configuration file (defaults to `.keeenv`).
+  - `--strict`: Fail if any placeholder cannot be resolved.
+  - `--quiet`: Reduce logging output (only errors).
+  - `--verbose`: Increase logging verbosity (debug details).
+
+Behavior:
+
+- Reads the `[env]` section from the `.keeenv` configuration file
+- Connects to the KeePass database specified in the `[keepass]` section
+- Evaluates all placeholders and exports the resulting environment variables
+- Prints shell-safe `export` commands to stdout to be consumed by your shell
+
+Example:
+
+```shell
+# Export all environment variables
+eval "$(keeenv eval)"
+
+# Export with custom config and strict mode
+eval "$(keeenv --config ./config/.keeenv --strict eval)"
+`
+
+`run`: Execute a command with environment variables set from KeePass database.
+
+- `keeenv [--config PATH] [--quiet | --verbose] run COMMAND [ARGS...]`
+  - `--config PATH`: Path to configuration file (defaults to `.keeenv`).
+  - `--quiet`: Reduce logging output (only errors).
+  - `--verbose`: Increase logging verbosity (debug details).
+  - `COMMAND`: The command to execute.
+  - `ARGS...`: Additional arguments to pass to the command.
+
+Behavior:
+
+- Reads the `[env]` section from the `.keeenv` configuration file
+- Connects to the KeePass database specified in the `[keepass]` section
+- Evaluates all placeholders and sets the resulting environment variables
+- Executes the specified command with those environment variables
+- Forwards the exit code of the executed command
+
+Examples:
+
+```shell
+# Run a command with environment variables
+keeenv run echo "Hello World"
+
+# Run a command with environment variables and custom config
+keeenv --config ./config/.keeenv run my-command --arg1 --arg2
+
+# Run a command with environment variables and verbose logging
+keeenv --verbose run curl -H "Authorization: Bearer $API_KEY" https://api.example.com
+`
+
+`list`: List environment variable names from `.keeenv`.
+
+- `keeenv [--config PATH] list`
+  - `--config PATH`: Path to configuration file (defaults to `.keeenv`).
+
+Behavior:
+- Reads the `[env]` section from the `.keeenv` configuration file
+- Outputs each environment variable name on a separate line
+- No KeePass database connection or value evaluation is performed
+- Useful for scripting and bulk operations
+
+Examples:
+```shell
+# List all environment variable names
+keeenv list
+
+# List variables from custom config
+keeenv --config ./config/.keeenv list
+
+# Unset all environment variables in the current shell
+eval unset $(keeenv list)
+```
+
 `init`: Initialize a new `.keeenv` configuration file with a `[keepass]` section.
 
 - `keeenv [--config PATH] init [--kdbx PATH] [--keyfile PATH] [--force]`
@@ -180,16 +258,30 @@ keeenv --config ./config/.keeenv init --kdbx ./secrets.kdbx --force
 Export variables using the generated config:
 
 ```shell
-eval "$(keeenv)"
+eval "$(keeenv eval)"
 ```
 
 Custom config path:
 
 ```shell
-eval "$(keeenv --config ./config/.keeenv)"
+eval "$(keeenv --config ./config/.keeenv eval)"
 ```
 
 Combine options:
+
+```shell
+eval "$(keeenv --config ./secrets/.keeenv --strict --verbose eval)"
+```
+
+List environment variables:
+
+```shell
+# List all environment variable names
+keeenv list
+
+# Unset all environment variables in the current shell
+eval unset $(keeenv list)
+```
 
 ```shell
 eval "$(keeenv --config ./secrets/.keeenv --strict --verbose)"
