@@ -615,7 +615,7 @@ def _cmd_run(*, config_path: str, command: list[str]) -> None:
                     final_value = kp_manager.substitute_placeholders(
                         value_template, strict=True
                     )
-                    env_vars[var_name.upper()] = final_value
+                    env_vars[var_name] = final_value
 
             # Execute the command with the environment variables
             logger.info("Executing command: %s", " ".join(command))
@@ -756,7 +756,7 @@ def main() -> None:
                     )
                     # Use shlex.quote for safe shell exporting
                     exports.append(
-                        f"export {var_name.upper()}={shlex.quote(final_value)}"
+                        f"export {var_name}={shlex.quote(final_value)}"
                     )
 
             # Print export commands

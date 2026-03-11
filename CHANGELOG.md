@@ -1,5 +1,9 @@
 # Change Log
 
+## v0.4.0
+
+- Removed enforcement of uppercase env vars to support Terraform TF_VAR style env settings.
+
 ## v0.3.0
 
 - Added `eval` subcommand to generate the environment variables.
