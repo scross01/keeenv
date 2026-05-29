@@ -1,5 +1,9 @@
 # Change Log
 
+## v0.5.1
+
+- Fixed `run` command failing when the command is quoted (e.g. `keeenv run "echo hello"`).
+
 ## v0.5.0
 
 - Unexpected CLI errors now log details and a traceback to stderr instead of failing silently.

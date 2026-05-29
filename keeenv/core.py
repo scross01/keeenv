@@ -599,6 +599,11 @@ def _cmd_run(*, config_path: str, command: list[str]) -> None:
             full_env.update(env_vars)
 
             # Execute the command (list form, no shell for security)
+            # If the user quoted the entire command (e.g., keeenv run "echo hello"),
+            # argparse gives a single string. Split it with shlex so subprocess
+            # can find the executable.
+            if len(command) == 1:
+                command = shlex.split(command[0])
             result = subprocess.run(command, env=full_env, shell=False)
 
             # Forward the exit code

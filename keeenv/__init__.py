@@ -7,7 +7,7 @@ Keepass database to dynamically fetch sensitive data rather than manually
 placing passwords and api keys in plain text on the local file system.
 """
 
-__version__ = "0.5.0"
+__version__ = "0.5.1"
 
 from .core import main
 

@@ -12,6 +12,7 @@ from keeenv.config import KeeenvConfig
 from keeenv.core import (
     main,
     _cmd_add,
+    _cmd_run,
 )
 from keeenv.exceptions import (
     ConfigError,
@@ -582,3 +583,281 @@ class TestCmdAddFunctionWithPasswordLogic:
         mock_kp_manager.set_entry_attribute.assert_called_once()
         mock_kp_manager.save_database.assert_called_once()
         mock_kp_manager.disconnect.assert_called_once()
+
+
+class TestCmdRunCommandParsing:
+    """Test _cmd_run command parsing with shlex.split for quoted commands."""
+
+    @staticmethod
+    def _make_mock_config(env_vars=None):
+        """Create a case-preserving mock ConfigParser."""
+        cfg = configparser.ConfigParser()
+        cfg.optionxform = str  # preserve key case like KeeenvConfig does
+        cfg["keepass"] = {"database": "tests/secrets.kdbx"}
+        cfg["env"] = env_vars or {}
+        return cfg
+
+    @staticmethod
+    def _make_mock_config_instance(mock_config):
+        """Create a mock KeeenvConfig that returns the given config."""
+        instance = Mock()
+        instance.get_config.return_value = mock_config
+        instance.validate_keepass_config.return_value = (
+            "tests/secrets.kdbx",
+            None,
+        )
+        return instance
+
+    @patch("keeenv.core.subprocess.run")
+    @patch("keeenv.core.KeePassManager")
+    @patch("keeenv.core.KeeenvConfig")
+    def test_single_element_command_is_split(
+        self,
+        mock_config_class,
+        mock_kp_manager_class,
+        mock_subprocess_run,
+    ):
+        """"echo hello" (single element) should be split to ['echo', 'hello']."""
+        mock_config = self._make_mock_config()
+        mock_config_class.return_value = self._make_mock_config_instance(mock_config)
+
+        mock_kp_manager = Mock()
+        mock_kp_manager.substitute_placeholders.return_value = ""
+        mock_kp_manager_class.return_value = mock_kp_manager
+
+        with patch("sys.exit"):
+            _cmd_run(
+                config_path="test_config.ini",
+                command=["echo hello"],
+            )
+
+        mock_subprocess_run.assert_called_once()
+        command_arg = mock_subprocess_run.call_args[0][0]
+        assert command_arg == ["echo", "hello"], (
+            f"Expected ['echo', 'hello'] but got {command_arg}"
+        )
+        mock_kp_manager.connect_with_password_fallback.assert_called_once()
+        mock_kp_manager.disconnect.assert_called_once()
+
+    @patch("keeenv.core.subprocess.run")
+    @patch("keeenv.core.KeePassManager")
+    @patch("keeenv.core.KeeenvConfig")
+    def test_multi_element_command_not_split(
+        self,
+        mock_config_class,
+        mock_kp_manager_class,
+        mock_subprocess_run,
+    ):
+        """['echo', 'hello', 'world'] (multiple elements) should pass through unchanged."""
+        mock_config = self._make_mock_config()
+        mock_config_class.return_value = self._make_mock_config_instance(mock_config)
+
+        mock_kp_manager = Mock()
+        mock_kp_manager.substitute_placeholders.return_value = ""
+        mock_kp_manager_class.return_value = mock_kp_manager
+
+        with patch("sys.exit"):
+            _cmd_run(
+                config_path="test_config.ini",
+                command=["echo", "hello", "world"],
+            )
+
+        mock_subprocess_run.assert_called_once()
+        command_arg = mock_subprocess_run.call_args[0][0]
+        assert command_arg == ["echo", "hello", "world"], (
+            f"Expected ['echo', 'hello', 'world'] but got {command_arg}"
+        )
+        mock_kp_manager.connect_with_password_fallback.assert_called_once()
+        mock_kp_manager.disconnect.assert_called_once()
+
+    @patch("keeenv.core.subprocess.run")
+    @patch("keeenv.core.KeePassManager")
+    @patch("keeenv.core.KeeenvConfig")
+    def test_single_element_with_quoted_args_preserved(
+        self,
+        mock_config_class,
+        mock_kp_manager_class,
+        mock_subprocess_run,
+    ):
+        """Quoted args inside a single-element command should be preserved.
+        E.g. \"echo 'hello world'\" splits to ['echo', 'hello world']."""
+        mock_config = self._make_mock_config()
+        mock_config_class.return_value = self._make_mock_config_instance(mock_config)
+
+        mock_kp_manager = Mock()
+        mock_kp_manager.substitute_placeholders.return_value = ""
+        mock_kp_manager_class.return_value = mock_kp_manager
+
+        with patch("sys.exit"):
+            _cmd_run(
+                config_path="test_config.ini",
+                command=["echo 'hello world'"],
+            )
+
+        mock_subprocess_run.assert_called_once()
+        command_arg = mock_subprocess_run.call_args[0][0]
+        assert command_arg == ["echo", "hello world"], (
+            f"Expected ['echo', 'hello world'] but got {command_arg}"
+        )
+        mock_kp_manager.connect_with_password_fallback.assert_called_once()
+        mock_kp_manager.disconnect.assert_called_once()
+
+    @patch("keeenv.core.subprocess.run")
+    @patch("keeenv.core.KeePassManager")
+    @patch("keeenv.core.KeeenvConfig")
+    def test_single_element_simple_command(
+        self,
+        mock_config_class,
+        mock_kp_manager_class,
+        mock_subprocess_run,
+    ):
+        """A single-word quoted command like \"ls\" should work."""
+        mock_config = self._make_mock_config()
+        mock_config_class.return_value = self._make_mock_config_instance(mock_config)
+
+        mock_kp_manager = Mock()
+        mock_kp_manager.substitute_placeholders.return_value = ""
+        mock_kp_manager_class.return_value = mock_kp_manager
+
+        with patch("sys.exit"):
+            _cmd_run(
+                config_path="test_config.ini",
+                command=["ls"],
+            )
+
+        mock_subprocess_run.assert_called_once()
+        command_arg = mock_subprocess_run.call_args[0][0]
+        assert command_arg == ["ls"], (
+            f"Expected ['ls'] but got {command_arg}"
+        )
+        mock_kp_manager.connect_with_password_fallback.assert_called_once()
+        mock_kp_manager.disconnect.assert_called_once()
+
+    @patch("keeenv.core.subprocess.run")
+    @patch("keeenv.core.KeePassManager")
+    @patch("keeenv.core.KeeenvConfig")
+    def test_single_element_with_double_quotes(
+        self,
+        mock_config_class,
+        mock_kp_manager_class,
+        mock_subprocess_run,
+    ):
+        """Double-quoted args inside a quoted command should split correctly.
+        E.g. 'python -c \"print(1+1)\"' splits to ['python', '-c', 'print(1+1)']."""
+        mock_config = self._make_mock_config()
+        mock_config_class.return_value = self._make_mock_config_instance(mock_config)
+
+        mock_kp_manager = Mock()
+        mock_kp_manager.substitute_placeholders.return_value = ""
+        mock_kp_manager_class.return_value = mock_kp_manager
+
+        with patch("sys.exit"):
+            _cmd_run(
+                config_path="test_config.ini",
+                command=['python -c "print(1+1)"'],
+            )
+
+        mock_subprocess_run.assert_called_once()
+        command_arg = mock_subprocess_run.call_args[0][0]
+        assert command_arg == ["python", "-c", "print(1+1)"], (
+            f"Expected ['python', '-c', 'print(1+1)'] but got {command_arg}"
+        )
+        mock_kp_manager.connect_with_password_fallback.assert_called_once()
+        mock_kp_manager.disconnect.assert_called_once()
+
+    @patch("keeenv.core.subprocess.run")
+    @patch("keeenv.core.KeePassManager")
+    @patch("keeenv.core.KeeenvConfig")
+    def test_env_vars_passed_to_subprocess(
+        self,
+        mock_config_class,
+        mock_kp_manager_class,
+        mock_subprocess_run,
+    ):
+        """Env vars from KeePass should be passed to subprocess.run via env kwarg."""
+        mock_config = self._make_mock_config({
+            "SECRET": '${"Entry".Password}',
+        })
+        mock_config_class.return_value = self._make_mock_config_instance(mock_config)
+
+        mock_kp_manager = Mock()
+        mock_kp_manager.substitute_placeholders.return_value = "supersecret"
+        mock_kp_manager_class.return_value = mock_kp_manager
+
+        with patch("sys.exit"):
+            _cmd_run(
+                config_path="test_config.ini",
+                command=["echo", "hello"],
+            )
+
+        mock_subprocess_run.assert_called_once()
+        env_kwarg = mock_subprocess_run.call_args[1].get("env", {})
+        assert env_kwarg.get("SECRET") == "supersecret", (
+            f"Expected env SECRET=supersecret, got {env_kwarg.get('SECRET')}"
+        )
+
+    @patch("keeenv.core.subprocess.run")
+    @patch("keeenv.core.KeePassManager")
+    @patch("keeenv.core.KeeenvConfig")
+    def test_run_preserves_variable_case(
+        self,
+        mock_config_class,
+        mock_kp_manager_class,
+        mock_subprocess_run,
+    ):
+        """Env var case from .keeenv is preserved (no uppercase forcing)."""
+        mock_config = self._make_mock_config({
+            "TF_VAR_api_key": '${"Entry".Password}',
+            "mixedCaseVar": '${"Entry".Password}',
+        })
+        mock_config_class.return_value = self._make_mock_config_instance(mock_config)
+
+        mock_kp_manager = Mock()
+        mock_kp_manager.substitute_placeholders.return_value = "secretval"
+        mock_kp_manager_class.return_value = mock_kp_manager
+
+        with patch("sys.exit"):
+            _cmd_run(
+                config_path="test_config.ini",
+                command=["env"],
+            )
+
+        mock_subprocess_run.assert_called_once()
+        env_kwarg = mock_subprocess_run.call_args[1].get("env", {})
+        assert "TF_VAR_api_key" in env_kwarg, (
+            f"Expected TF_VAR_api_key in env, got keys: {list(env_kwarg.keys())}"
+        )
+        assert "mixedCaseVar" in env_kwarg, (
+            f"Expected mixedCaseVar in env, got keys: {list(env_kwarg.keys())}"
+        )
+        assert "TF_VAR_API_KEY" not in env_kwarg
+        assert "MIXEDCASEVAR" not in env_kwarg
+
+    @patch("keeenv.core.subprocess.run")
+    @patch("keeenv.core.KeePassManager")
+    @patch("keeenv.core.KeeenvConfig")
+    def test_shell_false_passed_to_subprocess(
+        self,
+        mock_config_class,
+        mock_kp_manager_class,
+        mock_subprocess_run,
+    ):
+        """subprocess.run should be called with shell=False for security."""
+        mock_config = self._make_mock_config()
+        mock_config_class.return_value = self._make_mock_config_instance(mock_config)
+
+        mock_kp_manager = Mock()
+        mock_kp_manager.substitute_placeholders.return_value = ""
+        mock_kp_manager_class.return_value = mock_kp_manager
+
+        with patch("sys.exit"):
+            _cmd_run(
+                config_path="test_config.ini",
+                command=["echo", "hello"],
+            )
+
+        mock_subprocess_run.assert_called_once()
+        shell_kwarg = mock_subprocess_run.call_args[1].get("shell")
+        assert shell_kwarg is False, (
+            f"Expected shell=False but got shell={shell_kwarg}"
+        )
