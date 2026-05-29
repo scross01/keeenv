@@ -196,7 +196,9 @@ def test_init_update_existing_config(tmp_path: Path):
     # Simulate: choose Update 'u', then accept default current db (press Enter), then keyfile blank
     input_text = "u\n\n\n"
     proc = run_cli(
-        ["--config", str(initial_cfg), "init"], cwd=tmp_path, input_text=input_text
+        ["--config", str(initial_cfg), "init"],
+        cwd=tmp_path,
+        input_text=input_text,
     )
     assert proc.returncode in (0, 1) or proc.stderr == ""
     # Should remain valid and contain database (either same or updated)
@@ -217,7 +219,8 @@ def test_init_overwrite_existing_config_with_force(tmp_path: Path):
     kdbx = tmp_path / "new.kdbx"
     kdbx.write_text("dummy")
     run_cli(
-        ["--config", str(cfg), "init", "--kdbx", str(kdbx), "--force"], cwd=tmp_path
+        ["--config", str(cfg), "init", "--kdbx", str(kdbx), "--force"],
+        cwd=tmp_path,
     )
     assert cfg.exists()
     content = read_config(cfg)
@@ -372,17 +375,15 @@ def test_list_shows_env_var_names(tmp_path: Path):
     """Test that `keeenv list` displays environment variable names from [env] section."""
     cfg_path = tmp_path / ".keeenv"
     cfg_path.write_text(
-        textwrap.dedent(
-            """
+        textwrap.dedent("""
             [keepass]
             database = ./test.kdbx
-            
+
             [env]
             API_KEY = ${"MyAPI".password}
             DATABASE_URL = ${"DB".url}
             SECRET_TOKEN = ${"Token".notes}
-            """
-        ).strip(),
+            """).strip(),
         encoding="utf-8",
     )
 
@@ -405,14 +406,12 @@ def test_list_empty_env_section_shows_message(tmp_path: Path):
     """Test that `keeenv list` shows appropriate message when [env] section is empty."""
     cfg_path = tmp_path / ".keeenv"
     cfg_path.write_text(
-        textwrap.dedent(
-            """
+        textwrap.dedent("""
             [keepass]
             database = ./test.kdbx
-            
+
             [env]
-            """
-        ).strip(),
+            """).strip(),
         encoding="utf-8",
     )
 
@@ -427,12 +426,10 @@ def test_list_no_env_section_shows_message(tmp_path: Path):
     """Test that `keeenv list` shows appropriate message when [env] section is missing."""
     cfg_path = tmp_path / ".keeenv"
     cfg_path.write_text(
-        textwrap.dedent(
-            """
+        textwrap.dedent("""
             [keepass]
             database = ./test.kdbx
-            """
-        ).strip(),
+            """).strip(),
         encoding="utf-8",
     )
 
@@ -447,26 +444,24 @@ def test_list_config_file_not_found_shows_error():
     """Test that `keeenv list` shows error when config file doesn't exist."""
     proc = run_cli(["--config", "/nonexistent/path.keeenv", "list"])
 
-    # Should succeed but show error message
-    assert proc.returncode == 0
-    assert "Configuration file not found" in proc.stdout
+    # Should fail with non-zero exit and show error message
+    assert proc.returncode == 1
+    assert "Configuration file" in proc.stderr and "not found" in proc.stderr
 
 
 def test_list_preserves_variable_case(tmp_path: Path):
     """Test that `keeenv list` preserves the case of environment variable names."""
     cfg_path = tmp_path / ".keeenv"
     cfg_path.write_text(
-        textwrap.dedent(
-            """
+        textwrap.dedent("""
             [keepass]
             database = ./test.kdbx
-            
+
             [env]
             MixedCase_VAR = ${"Entry".password}
             ALL_CAPS = ${"Entry".password}
             snake_case = ${"Entry".password}
-            """
-        ).strip(),
+            """).strip(),
         encoding="utf-8",
     )
 
@@ -484,17 +479,15 @@ def test_list_multiple_variables_each_on_new_line(tmp_path: Path):
     """Test that `keeenv list` shows each variable name on a separate line."""
     cfg_path = tmp_path / ".keeenv"
     cfg_path.write_text(
-        textwrap.dedent(
-            """
+        textwrap.dedent("""
             [keepass]
             database = ./test.kdbx
-            
+
             [env]
             VAR1 = ${"Entry1".password}
             VAR2 = ${"Entry2".password}
             VAR3 = ${"Entry3".password}
-            """
-        ).strip(),
+            """).strip(),
         encoding="utf-8",
     )
 
@@ -510,16 +503,14 @@ def test_run_executes_command_with_env_vars(tmp_path: Path):
 
     cfg_path = tmp_path / ".keeenv"
     cfg_path.write_text(
-        textwrap.dedent(
-            f"""
+        textwrap.dedent(f"""
             [keepass]
             database = {kdbx}
-            
+
             [env]
             TEST_VAR = test_value
             ANOTHER_VAR = another_value
-            """
-        ).strip(),
+            """).strip(),
         encoding="utf-8",
     )
 
@@ -542,20 +533,19 @@ def test_run_executes_command_with_env_vars_quoted_args(tmp_path: Path):
 
     cfg_path = tmp_path / ".keeenv"
     cfg_path.write_text(
-        textwrap.dedent(
-            f"""
+        textwrap.dedent(f"""
             [keepass]
             database = {kdbx}
-            
+
             [env]
             TEST_VAR = test_value
-            """
-        ).strip(),
+            """).strip(),
         encoding="utf-8",
     )
 
     proc = run_cli(
-        ["--config", str(cfg_path), "run", "echo", '"hello world"'], cwd=tmp_path
+        ["--config", str(cfg_path), "run", "echo", '"hello world"'],
+        cwd=tmp_path,
     )
 
     # Should fail due to invalid database, but should not show export commands
@@ -573,16 +563,14 @@ def test_run_executes_complex_command(tmp_path: Path):
 
     cfg_path = tmp_path / ".keeenv"
     cfg_path.write_text(
-        textwrap.dedent(
-            f"""
+        textwrap.dedent(f"""
             [keepass]
             database = {kdbx}
-            
+
             [env]
             API_KEY = secret123
             BASE_URL = https://api.example.com
-            """
-        ).strip(),
+            """).strip(),
         encoding="utf-8",
     )
 
@@ -624,20 +612,19 @@ def test_run_with_verbose_logging(tmp_path: Path):
 
     cfg_path = tmp_path / ".keeenv"
     cfg_path.write_text(
-        textwrap.dedent(
-            f"""
+        textwrap.dedent(f"""
             [keepass]
             database = {kdbx}
-            
+
             [env]
             TEST_VAR = test_value
-            """
-        ).strip(),
+            """).strip(),
         encoding="utf-8",
     )
 
     proc = run_cli(
-        ["--config", str(cfg_path), "--verbose", "run", "echo", "test"], cwd=tmp_path
+        ["--config", str(cfg_path), "--verbose", "run", "echo", "test"],
+        cwd=tmp_path,
     )
 
     # Should fail due to invalid database, but verbose mode should show debug information
@@ -798,14 +785,12 @@ def test_run_empty_env_section_executes_command(tmp_path: Path):
 
     cfg_path = tmp_path / ".keeenv"
     cfg_path.write_text(
-        textwrap.dedent(
-            f"""
+        textwrap.dedent(f"""
             [keepass]
             database = {kdbx}
-            
+
             [env]
-            """
-        ).strip(),
+            """).strip(),
         encoding="utf-8",
     )
 

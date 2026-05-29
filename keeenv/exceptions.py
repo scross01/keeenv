@@ -79,12 +79,6 @@ class KeePassEntryNotFoundError(KeePassError):
     pass
 
 
-class KeePassAttributeNotFoundError(KeePassError):
-    """Raised when KeePass attribute is not found."""
-
-    pass
-
-
 class ValidationError(KeeenvError):
     """Input validation errors."""
 

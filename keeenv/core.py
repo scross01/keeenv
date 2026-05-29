@@ -6,11 +6,11 @@ import getpass
 import logging
 import os
 import shlex
+import subprocess
 import sys
 
 from keeenv.config import KeeenvConfig
 from keeenv.constants import (
-    ERROR_COULD_NOT_READ_PASSWORD,
     CONFIG_FILENAME,
     KEEPASS_SECTION,
     ENV_SECTION,
@@ -19,7 +19,6 @@ from keeenv.exceptions import (
     ConfigError,
     ConfigFileNotFoundError,
     KeePassError,
-    KeePassCredentialsError,
     ValidationError,
     SecurityError,
 )
@@ -30,16 +29,6 @@ from keeenv.validation import (
     PathValidator,
 )
 from typing import Optional
-
-
-def _get_master_password(db_path: str) -> str:
-    """Prompt for and return the master password."""
-    try:
-        return getpass.getpass(
-            f"Enter master password for {os.path.basename(db_path)}: "
-        )
-    except EOFError:
-        raise KeePassCredentialsError(ERROR_COULD_NOT_READ_PASSWORD)
 
 
 def _handle_error(error) -> None:
@@ -427,7 +416,7 @@ def _cmd_add(
             if not sys.stdin.isatty():
                 piped = sys.stdin.read()
                 if piped:
-                    secret = piped.strip("\n\r")
+                    secret = piped.strip()
         except Exception:
             # Fall back to prompt if stdin handling fails
             pass
@@ -448,14 +437,7 @@ def _cmd_add(
 
     # Use KeePassManager for database operations
     kp_manager = KeePassManager(db_path, keyfile_path)
-
-    # Try to connect without password first, only prompt if needed
-    try:
-        kp_manager.connect(password=None)
-    except KeePassCredentialsError:
-        # Database requires password, prompt for it
-        password = _get_master_password(db_path)
-        kp_manager.connect(password)
+    kp_manager.connect_with_password_fallback()
 
     try:
         # Find or create the entry using KeePassManager
@@ -480,6 +462,7 @@ def _cmd_add(
                 final_title,
                 username=username if username else "",
                 password="",  # set after based on attribute
+                group=group_for_entry,
             )
         else:
             # update username if requested
@@ -556,18 +539,18 @@ def _cmd_list(*, config_path: str) -> None:
             for var_name in env_vars.keys():
                 print(var_name)
             logger.info(
-                "Listed %d environment variable(s) from %s", len(env_vars), config_path
+                "Listed %d environment variable(s) from %s",
+                len(env_vars),
+                config_path,
             )
         else:
             print("No environment variables found in [env] section")
             logger.info("No environment variables found in %s", config_path)
 
-    except ConfigFileNotFoundError:
-        print(f"Configuration file not found: {config_path}")
-        logger.warning("Configuration file not found: %s", config_path)
+    except ConfigFileNotFoundError as e:
+        _handle_error(e)
     except ConfigError as e:
-        print(f"Configuration error: {e}")
-        logger.error("Configuration error: %s", e)
+        _handle_error(e)
 
 
 def _cmd_run(*, config_path: str, command: list[str]) -> None:
@@ -579,9 +562,6 @@ def _cmd_run(*, config_path: str, command: list[str]) -> None:
     - Execute the specified command in a child process with those environment variables
     - Forward the exit code of the child process
     """
-    import subprocess
-    import os
-
     logger = logging.getLogger(__name__)
 
     try:
@@ -596,14 +576,7 @@ def _cmd_run(*, config_path: str, command: list[str]) -> None:
 
         # Use KeePassManager for database operations
         kp_manager = KeePassManager(validated_db_path, validated_keyfile_path)
-
-        # Try to connect without password first, only prompt if needed
-        try:
-            kp_manager.connect(password=None)
-        except KeePassCredentialsError:
-            # Database requires password, prompt for it
-            password = _get_master_password(validated_db_path)
-            kp_manager.connect(password)
+        kp_manager.connect_with_password_fallback()
 
         try:
             # Process environment variables using KeePassManager
@@ -625,8 +598,8 @@ def _cmd_run(*, config_path: str, command: list[str]) -> None:
             full_env = os.environ.copy()
             full_env.update(env_vars)
 
-            # Execute the command
-            result = subprocess.run(command, env=full_env, shell=True)
+            # Execute the command (list form, no shell for security)
+            result = subprocess.run(command, env=full_env, shell=False)
 
             # Forward the exit code
             sys.exit(result.returncode)
@@ -735,14 +708,7 @@ def main() -> None:
 
         # Use KeePassManager for database operations
         kp_manager = KeePassManager(validated_db_path, validated_keyfile_path)
-
-        # Try to connect without password first, only prompt if needed
-        try:
-            kp_manager.connect(password=None)
-        except KeePassCredentialsError:
-            # Database requires password, prompt for it
-            password = _get_master_password(validated_db_path)
-            kp_manager.connect(password)
+        kp_manager.connect_with_password_fallback()
 
         try:
             # Process environment variables using KeePassManager
@@ -755,9 +721,7 @@ def main() -> None:
                         value_template, strict=strict_mode
                     )
                     # Use shlex.quote for safe shell exporting
-                    exports.append(
-                        f"export {var_name}={shlex.quote(final_value)}"
-                    )
+                    exports.append(f"export {var_name}={shlex.quote(final_value)}")
 
             # Print export commands
             if exports:

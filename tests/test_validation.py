@@ -177,19 +177,6 @@ class TestSecurityValidator:
             os.chmod(tmp.name, 0o600)
             SecurityValidator.validate_database_security(tmp.name)
 
-    def test_validate_database_security_world_readable(self, caplog):
-        """Test security validation with world-readable file - not treated as a warning output"""
-        with tempfile.NamedTemporaryFile(mode="w") as tmp:
-            # Set world-readable permissions
-            os.chmod(tmp.name, 0o644)
-            # Run and validate that a warning about world-readable permissions is logged
-            with caplog.at_level("WARNING"):
-                SecurityValidator.validate_database_security(tmp.name)
-                assert any(
-                    "Database file is world-readable" in rec.message
-                    for rec in caplog.records
-                )
-
     def test_validate_database_security_with_keyfile(self):
         """Test security validation with keyfile"""
         with tempfile.NamedTemporaryFile(mode="w") as db_file:

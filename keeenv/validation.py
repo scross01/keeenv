@@ -32,9 +32,6 @@ ERROR_ATTR_INVALID_NAME = "Invalid attribute name"
 ERROR_KEYFILE_WORLD_READABLE = (
     "Keyfile is world-readable. Please restrict permissions to owner only."
 )
-ERROR_DATABASE_WORLD_READABLE = (
-    "Database file is world-readable. Please restrict permissions to owner only."
-)
 ERROR_FILE_NOT_FOUND = "File not found: {path}"
 ERROR_PATH_NOT_FILE = "Path is not a file: {path}"
 ERROR_INVALID_PATH = "Invalid path: {error}"
@@ -218,7 +215,7 @@ class SecurityValidator:
             KeyfileSecurityError: If keyfile security checks fail
         """
         try:
-            db_stat = os.stat(db_path)
+            os.stat(db_path)
         except OSError as e:
             # Log an error before raising to satisfy tests expecting ERROR-level log
             logger.error("%s %s", ERROR_CANNOT_ACCESS_DB.format(error=e), db_path)
@@ -226,11 +223,6 @@ class SecurityValidator:
 
         # Only perform POSIX permission checks on POSIX systems
         if os.name == "posix":
-            # Check if database is world-readable
-            if db_stat.st_mode & 0o044:
-                # Downgrade to warning (respect --quiet/--verbose)
-                logger.warning("%s %s", ERROR_DATABASE_WORLD_READABLE, db_path)
-
             # Check keyfile permissions if present
             if keyfile_path:
                 try:

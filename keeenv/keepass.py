@@ -35,7 +35,10 @@ class KeePassManager:
     """
 
     def __init__(
-        self, db_path: str, keyfile_path: Optional[str] = None, pykeepass_class=None
+        self,
+        db_path: str,
+        keyfile_path: Optional[str] = None,
+        pykeepass_class=None,
     ):
         """
         Initialize KeePassManager with database configuration.
@@ -86,6 +89,31 @@ class KeePassManager:
     def is_connected(self) -> bool:
         """Check if database connection is active."""
         return self._is_connected
+
+    def connect_with_password_fallback(self) -> None:
+        """
+        Try to connect without password. If credentials are required,
+        prompt the user for a master password and retry.
+
+        Raises:
+            KeePassCredentialsError: If connection fails even with prompted password
+            KeePassError: If database operations fail
+        """
+        import getpass
+        import os
+
+        try:
+            self.connect(password=None)
+        except KeePassCredentialsError:
+            try:
+                password = getpass.getpass(
+                    f"Enter master password for {os.path.basename(self.db_path)}: "
+                )
+            except EOFError:
+                raise KeePassCredentialsError(
+                    "Could not read master password from terminal"
+                )
+            self.connect(password)
 
     def find_entry(self, title: str, create_if_missing: bool = False) -> tuple:
         """
@@ -208,7 +236,12 @@ class KeePassManager:
 
             # Attribute not found -> let it fall through to generic wrapper for test expectation
             raise AttributeError(validated_attr)
-        except (ValidationError, KeePassCredentialsError, SecurityError, ConfigError):
+        except (
+            ValidationError,
+            KeePassCredentialsError,
+            SecurityError,
+            ConfigError,
+        ):
             # Preserve explicit domain exceptions that should map directly
             raise
         except Exception as e:
@@ -322,7 +355,9 @@ class KeePassManager:
                 else:
                     # For ValidationError, only log in non-strict mode
                     logger.warning(
-                        "Failed to resolve placeholder %s: %s", placeholder, str(e)
+                        "Failed to resolve placeholder %s: %s",
+                        placeholder,
+                        str(e),
                     )
                     return ""
 
@@ -356,6 +391,7 @@ class KeePassManager:
         password: str = "",
         url: str = "",
         notes: str = "",
+        group=None,
     ) -> "Entry":  # type: ignore
         """
         Create a new entry in the KeePass database.
@@ -366,6 +402,7 @@ class KeePassManager:
             password: Password field (optional)
             url: URL field (optional)
             notes: Notes field (optional)
+            group: Parent group for the entry (defaults to root_group if None)
 
         Returns:
             Created entry object
@@ -377,8 +414,11 @@ class KeePassManager:
 
         if not self.kp:
             raise KeePassError("Database not connected. Call connect() first.")
+        parent_group = (
+            group if group is not None else self.kp.root_group
+        )  # pyright: ignore[reportAttributeAccessIssue]
         entry = self.kp.add_entry(
-            self.kp.root_group,  # pyright: ignore[reportAttributeAccessIssue]
+            parent_group,
             title=validated_title,
             username=username,
             password=password,

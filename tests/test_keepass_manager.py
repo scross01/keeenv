@@ -1,215 +1,325 @@
 """
-Unit tests for KeePassManager class.
+Unit tests for KeePassManager class (pytest style).
 """
 
-import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
+import pytest
+from pykeepass.exceptions import CredentialsError as PyKPCredentialsError
 
 from keeenv.keepass import KeePassManager
 from keeenv.exceptions import KeePassError
 
 
-class TestKeePassManager(unittest.TestCase):
-    """Test cases for KeePassManager class."""
+@pytest.fixture
+def manager():
+    """Create a KeePassManager instance for testing."""
+    return KeePassManager("/tmp/test.kdbx", "/tmp/test.key")
 
-    def setUp(self):
-        """Set up test fixtures."""
-        self.test_db_path = "/tmp/test.kdbx"
-        self.test_keyfile_path = "/tmp/test.key"
-        self.manager = KeePassManager(self.test_db_path, self.test_keyfile_path)
 
-    def test_init(self):
+@pytest.fixture
+def mock_pykeepass_class():
+    """Create a mock PyKeePass class."""
+    return Mock()
+
+
+@pytest.fixture
+def connected_manager(mock_pykeepass_class):
+    """Create a connected KeePassManager instance."""
+    mock_kp = Mock()
+    mock_kp.root_group = Mock()
+    mock_pykeepass_class.return_value = mock_kp
+    mgr = KeePassManager(
+        "/tmp/test.kdbx",
+        "/tmp/test.key",
+        pykeepass_class=mock_pykeepass_class,
+    )
+    mgr.connect("test_password")
+    return mgr
+
+
+class TestInit:
+    """Tests for KeePassManager initialization."""
+
+    def test_init(self, manager):
         """Test KeePassManager initialization."""
-        self.assertEqual(self.manager.db_path, self.test_db_path)
-        self.assertEqual(self.manager.keyfile_path, self.test_keyfile_path)
-        self.assertEqual(self.manager.password, "")
-        self.assertIsNone(self.manager.kp)
-        self.assertFalse(self.manager._is_connected)
+        assert manager.db_path == "/tmp/test.kdbx"
+        assert manager.keyfile_path == "/tmp/test.key"
+        assert manager.password == ""
+        assert manager.kp is None
+        assert manager._is_connected is False
 
-    def test_connect_success(self):
+
+class TestConnect:
+    """Tests for connect method."""
+
+    def test_connect_success(self, mock_pykeepass_class):
         """Test successful database connection."""
-        # Create a mock that will be used as the PyKeePass class
-        mock_pykeepass_class = Mock()
         mock_kp = Mock()
         mock_pykeepass_class.return_value = mock_kp
 
-        # Use dependency injection
-        manager = KeePassManager(
-            self.test_db_path,
-            self.test_keyfile_path,
+        mgr = KeePassManager(
+            "/tmp/test.kdbx",
+            "/tmp/test.key",
             pykeepass_class=mock_pykeepass_class,
         )
-        manager.connect("test_password")
-        self.assertTrue(manager._is_connected)
-        self.assertEqual(manager.password, "test_password")
+        mgr.connect("test_password")
+        assert mgr._is_connected is True
+        assert mgr.password == "test_password"
         mock_pykeepass_class.assert_called_once_with(
-            self.test_db_path,
+            "/tmp/test.kdbx",
             password="test_password",
-            keyfile=self.test_keyfile_path,
+            keyfile="/tmp/test.key",
         )
 
-    def test_connect_failure(self):
+    def test_connect_failure(self, mock_pykeepass_class):
         """Test database connection failure."""
-        # Create a mock that will raise an exception
-        mock_pykeepass_class = Mock(side_effect=Exception("Connection failed"))
+        mock_pykeepass_class.side_effect = Exception("Connection failed")
 
-        # Use dependency injection
-        manager = KeePassManager(
-            self.test_db_path,
-            self.test_keyfile_path,
+        mgr = KeePassManager(
+            "/tmp/test.kdbx",
+            "/tmp/test.key",
             pykeepass_class=mock_pykeepass_class,
         )
-        with self.assertRaises(KeePassError):
-            manager.connect("wrong_password")
+        with pytest.raises(KeePassError):
+            mgr.connect("wrong_password")
 
-    def test_disconnect(self):
+    def test_connect_with_password_fallback_no_password_needed(
+        self, mock_pykeepass_class
+    ):
+        """Test connect_with_password_fallback when no password is needed."""
+        mock_kp = Mock()
+        mock_pykeepass_class.return_value = mock_kp
+
+        mgr = KeePassManager(
+            "/tmp/test.kdbx",
+            "/tmp/test.key",
+            pykeepass_class=mock_pykeepass_class,
+        )
+        mgr.connect_with_password_fallback()
+        assert mgr._is_connected is True
+        mock_pykeepass_class.assert_called_once_with(
+            "/tmp/test.kdbx",
+            password=None,
+            keyfile="/tmp/test.key",
+        )
+
+    @patch("getpass.getpass")
+    def test_connect_with_password_fallback_prompts_on_credentials_error(
+        self, mock_getpass, mock_pykeepass_class
+    ):
+        """Test connect_with_password_fallback prompts for password on failure."""
+        mock_getpass.return_value = "prompted_password"
+        mock_kp = Mock()
+        # First call raises pykeepass CredentialsError, second call succeeds
+        mock_pykeepass_class.side_effect = [
+            PyKPCredentialsError("Invalid password"),
+            mock_kp,
+        ]
+
+        mgr = KeePassManager(
+            "/tmp/test.kdbx",
+            "/tmp/test.key",
+            pykeepass_class=mock_pykeepass_class,
+        )
+        mgr.connect_with_password_fallback()
+        assert mgr._is_connected is True
+        assert mock_pykeepass_class.call_count == 2
+        # Verify first call was without password
+        mock_pykeepass_class.assert_any_call(
+            "/tmp/test.kdbx",
+            password=None,
+            keyfile="/tmp/test.key",
+        )
+        # Verify second call was with prompted password
+        mock_pykeepass_class.assert_any_call(
+            "/tmp/test.kdbx",
+            password="prompted_password",
+            keyfile="/tmp/test.key",
+        )
+        mock_getpass.assert_called_once()
+
+
+class TestDisconnect:
+    """Tests for disconnect method."""
+
+    def test_disconnect(self, manager):
         """Test database disconnection."""
-        self.manager.kp = Mock()
-        self.manager._is_connected = True
-        self.manager.disconnect()
-        self.assertFalse(self.manager._is_connected)
-        self.assertEqual(self.manager.password, "")
-        self.assertIsNone(self.manager.kp)
+        manager.kp = Mock()
+        manager._is_connected = True
+        manager.disconnect()
+        assert manager._is_connected is False
+        assert manager.password == ""
+        assert manager.kp is None
 
-    def test_is_connected(self):
-        """Test connection status check."""
-        self.assertFalse(self.manager.is_connected())
 
-        self.manager._is_connected = True
-        self.assertTrue(self.manager.is_connected())
+class TestIsConnected:
+    """Tests for is_connected."""
 
-    def test_find_entry_not_connected(self):
+    def test_is_connected_false_by_default(self, manager):
+        """Test is_connected returns False by default."""
+        assert manager.is_connected() is False
+
+    def test_is_connected_true_when_set(self, manager):
+        """Test is_connected returns True when connected."""
+        manager._is_connected = True
+        assert manager.is_connected() is True
+
+
+class TestFindEntry:
+    """Tests for find_entry method."""
+
+    def test_find_entry_not_connected(self, manager):
         """Test finding entry when not connected."""
-        with self.assertRaises(KeePassError):
-            self.manager.find_entry("test_entry")
+        with pytest.raises(KeePassError):
+            manager.find_entry("test_entry")
 
-    def test_find_entry_success(self):
+    def test_find_entry_success(self, connected_manager):
         """Test successful entry finding."""
-        # Mock the PyKeePass instance
-        mock_kp = Mock()
         mock_entry = Mock()
-        mock_kp.find_entries.return_value = mock_entry
-        mock_kp.root_group = Mock()
-        self.manager.kp = mock_kp
-        self.manager._is_connected = True
+        connected_manager.kp.find_entries.return_value = mock_entry
 
-        entry, group, title = self.manager.find_entry("test_entry")
+        entry, group, title = connected_manager.find_entry("test_entry")
 
-        self.assertEqual(entry, mock_entry)
-        self.assertEqual(group, mock_kp.root_group)
-        self.assertEqual(title, "test_entry")
-        mock_kp.find_entries.assert_called_once_with(title="test_entry", first=True)
+        assert entry == mock_entry
+        assert group == connected_manager.kp.root_group
+        assert title == "test_entry"
+        connected_manager.kp.find_entries.assert_called_once_with(
+            title="test_entry", first=True
+        )
 
-    def test_get_secret_not_connected(self):
+
+class TestGetSecret:
+    """Tests for get_secret method."""
+
+    def test_get_secret_not_connected(self, manager):
         """Test getting secret when not connected."""
-        with self.assertRaises(KeePassError):
-            self.manager.get_secret("test_entry", "password")
+        with pytest.raises(KeePassError):
+            manager.get_secret("test_entry", "password")
 
-    def test_get_secret_success(self):
+    def test_get_secret_success(self, connected_manager):
         """Test successful secret retrieval."""
-        # Mock the PyKeePass instance and entry
-        mock_kp = Mock()
         mock_entry = Mock()
         mock_entry.password = "secret123"
-        mock_kp.find_entries.return_value = mock_entry
-        mock_kp.root_group = Mock()
-        self.manager.kp = mock_kp
-        self.manager._is_connected = True
+        connected_manager.kp.find_entries.return_value = mock_entry
 
-        secret = self.manager.get_secret("test_entry", "password")
+        secret = connected_manager.get_secret("test_entry", "password")
 
-        self.assertEqual(secret, "secret123")
+        assert secret == "secret123"
 
-    def test_substitute_placeholders_not_connected(self):
+
+class TestSubstitutePlaceholders:
+    """Tests for substitute_placeholders method."""
+
+    def test_substitute_placeholders_not_connected(self, manager):
         """Test substituting placeholders when not connected."""
-        # Ensure manager is not connected
-        self.manager.disconnect()
-        with self.assertRaises(KeePassError):
-            self.manager.substitute_placeholders('${"test"."password"}')
+        manager.disconnect()
+        with pytest.raises(KeePassError):
+            manager.substitute_placeholders('${"test"."password"}')
 
-    def test_substitute_placeholders_success(self):
+    def test_substitute_placeholders_success(self, connected_manager):
         """Test successful placeholder substitution."""
-        # Mock the get_secret method to return a specific value
-        self.manager.get_secret = Mock(return_value="secret123")
-        self.manager._is_connected = True
+        connected_manager.get_secret = Mock(return_value="secret123")
 
-        result = self.manager.substitute_placeholders('${"test"."password"}')
+        result = connected_manager.substitute_placeholders('${"test"."password"}')
 
-        self.assertEqual(result, "secret123")
-        self.manager.get_secret.assert_called_once_with("test", "password")
+        assert result == "secret123"
+        connected_manager.get_secret.assert_called_once_with("test", "password")
 
-    def test_format_placeholder(self):
-        """Test placeholder formatting."""
-        result = self.manager.format_placeholder("test_entry", "password")
-        self.assertEqual(result, '${"test_entry".password}')
 
-        # Test with attribute that needs quotes
-        result = self.manager.format_placeholder("test_entry", "API Key")
-        self.assertEqual(result, '${"test_entry"."API Key"}')
+class TestFormatPlaceholder:
+    """Tests for format_placeholder method."""
 
-    def test_save_database_not_connected(self):
+    def test_format_placeholder_standard_attr(self, manager):
+        """Test placeholder formatting with standard attribute."""
+        result = manager.format_placeholder("test_entry", "password")
+        assert result == '${"test_entry".password}'
+
+    def test_format_placeholder_custom_attr(self, manager):
+        """Test placeholder formatting with custom attribute."""
+        result = manager.format_placeholder("test_entry", "API Key")
+        assert result == '${"test_entry"."API Key"}'
+
+
+class TestSaveDatabase:
+    """Tests for save_database method."""
+
+    def test_save_database_not_connected(self, manager):
         """Test saving database when not connected."""
-        with self.assertRaises(KeePassError):
-            self.manager.save_database()
+        with pytest.raises(KeePassError):
+            manager.save_database()
 
-    def test_save_database_success(self):
+    def test_save_database_success(self, manager):
         """Test successful database save."""
         mock_kp = Mock()
-        self.manager.kp = mock_kp
-        self.manager._is_connected = True
-
-        self.manager.save_database()
-
+        manager.kp = mock_kp
+        manager._is_connected = True
+        manager.save_database()
         mock_kp.save.assert_called_once()
 
-    def test_create_entry_not_connected(self):
+
+class TestCreateEntry:
+    """Tests for create_entry method."""
+
+    def test_create_entry_not_connected(self, manager):
         """Test creating entry when not connected."""
-        with self.assertRaises(KeePassError):
-            self.manager.create_entry("test_entry")
+        with pytest.raises(KeePassError):
+            manager.create_entry("test_entry")
 
-    def test_create_entry_success(self):
+    def test_create_entry_success(self, connected_manager):
         """Test successful entry creation."""
-        mock_kp = Mock()
         mock_entry = Mock()
-        mock_kp.add_entry.return_value = mock_entry
-        mock_kp.root_group = Mock()
-        self.manager.kp = mock_kp
-        self.manager._is_connected = True
+        connected_manager.kp.add_entry.return_value = mock_entry
 
-        entry = self.manager.create_entry("test_entry", username="testuser")
+        entry = connected_manager.create_entry("test_entry", username="testuser")
 
-        self.assertEqual(entry, mock_entry)
-        mock_kp.add_entry.assert_called_once_with(
-            mock_kp.root_group, title="test_entry", username="testuser", password=""
+        assert entry == mock_entry
+        connected_manager.kp.add_entry.assert_called_once_with(
+            connected_manager.kp.root_group,
+            title="test_entry",
+            username="testuser",
+            password="",
         )
 
-    def test_update_entry_not_connected(self):
+    def test_create_entry_with_specific_group(self, connected_manager):
+        """Test entry creation in a specific group (not root)."""
+        mock_group = Mock()
+        mock_entry = Mock()
+        connected_manager.kp.add_entry.return_value = mock_entry
+
+        entry = connected_manager.create_entry(
+            "test_entry", username="testuser", group=mock_group
+        )
+
+        assert entry == mock_entry
+        connected_manager.kp.add_entry.assert_called_once_with(
+            mock_group,
+            title="test_entry",
+            username="testuser",
+            password="",
+        )
+
+
+class TestUpdateEntry:
+    """Tests for update_entry method."""
+
+    def test_update_entry_not_connected(self, manager):
         """Test updating entry when not connected."""
         mock_entry = Mock()
-        with self.assertRaises(KeePassError):
-            self.manager.update_entry(mock_entry, username="newuser")
+        with pytest.raises(KeePassError):
+            manager.update_entry(mock_entry, username="newuser")
 
-    def test_update_entry_success(self):
+    def test_update_entry_success(self, connected_manager):
         """Test successful entry update."""
-        mock_kp = Mock()
-        # Create a mock entry that has username and url attributes
         mock_entry = Mock()
-        mock_entry.username = "olduser"  # Set initial values
+        mock_entry.username = "olduser"
         mock_entry.url = "http://old.com"
         mock_entry.notes = "old notes"
-        self.manager.kp = mock_kp
-        self.manager._is_connected = True
 
-        self.manager.update_entry(
+        connected_manager.update_entry(
             mock_entry, username="newuser", url="https://example.com"
         )
 
-        # Verify the attributes were set correctly
-        self.assertEqual(mock_entry.username, "newuser")
-        self.assertEqual(mock_entry.url, "https://example.com")
-        self.assertEqual(mock_entry.notes, "old notes")  # Should remain unchanged
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert mock_entry.username == "newuser"
+        assert mock_entry.url == "https://example.com"
+        assert mock_entry.notes == "old notes"  # Should remain unchanged

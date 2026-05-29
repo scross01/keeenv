@@ -15,7 +15,6 @@ from keeenv.core import (
 )
 from keeenv.exceptions import (
     ConfigError,
-    KeePassCredentialsError,
 )
 
 
@@ -32,7 +31,7 @@ database = tests/secrets.kdbx
 SECRET_PASSWORD = ${"My Secret".Password}
 """
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as tmp:
             tmp.write(config_content)
             tmp_path = tmp.name
 
@@ -53,7 +52,7 @@ SECRET_PASSWORD = ${"My Secret".Password}
 value = test
 """
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as tmp:
             tmp.write(config_content)
             tmp_path = tmp.name
 
@@ -76,7 +75,7 @@ keyfile = key.key
 SECRET = value
 """
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as tmp:
             tmp.write(config_content)
             tmp_path = tmp.name
 
@@ -94,7 +93,7 @@ SECRET = value
 database = tests/secrets.kdbx
 """
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as tmp:
             tmp.write(config_content)
             tmp_path = tmp.name
 
@@ -109,7 +108,7 @@ database = tests/secrets.kdbx
         """Test validation fails for non-existent file"""
         with pytest.raises(ConfigError, match="Configuration validation failed"):
             config_manager = KeeenvConfig()
-            config_manager.validate_config_file("/nonexistent/config.toml")
+            config_manager.validate_config_file("/nonexistent/config.ini")
 
 
 class TestMainFunction:
@@ -118,11 +117,9 @@ class TestMainFunction:
     @patch("keeenv.core.KeeenvConfig")
     @patch("keeenv.core.PathValidator.validate_file_path")
     @patch("keeenv.validation.SecurityValidator.validate_database_security")
-    @patch("keeenv.core.getpass.getpass")
     @patch("sys.argv", ["keeenv", "eval"])
     def test_main_success(
         self,
-        mock_getpass,
         mock_security,
         mock_path_validator,
         mock_config_class,
@@ -145,7 +142,6 @@ class TestMainFunction:
         mock_config_class.return_value = mock_config_instance
 
         mock_path_validator.return_value = Path("tests/secrets.kdbx")
-        mock_getpass.return_value = "password"
 
         # Mock KeePassManager and its methods
         mock_kp_manager = Mock(spec=KeePassManager)
@@ -155,8 +151,8 @@ class TestMainFunction:
         with patch(
             "keeenv.core.KeePassManager", return_value=mock_kp_manager
         ) as mock_kp_manager_class:
-            # Mock the connect method
-            mock_kp_manager.connect = Mock()
+            # Mock the connect_with_password_fallback method
+            mock_kp_manager.connect_with_password_fallback = Mock()
 
             # Capture stdout
             with patch("sys.stdout", new_callable=lambda: MagicMock()) as mock_stdout:
@@ -166,9 +162,7 @@ class TestMainFunction:
                 mock_kp_manager_class.assert_called_once_with(
                     "tests/secrets.kdbx", None
                 )
-                # With the new logic, it should try to connect without password first
-                # Since this test doesn't mock a credentials error, it will succeed with None
-                mock_kp_manager.connect.assert_called_once_with(password=None)
+                mock_kp_manager.connect_with_password_fallback.assert_called_once()
                 mock_kp_manager.substitute_placeholders.assert_called_once_with(
                     '${"Test".Password}', strict=False
                 )
@@ -233,8 +227,8 @@ class TestMainFunctionWithPasswordLogic:
         with patch(
             "keeenv.core.KeePassManager", return_value=mock_kp_manager
         ) as mock_kp_manager_class:
-            # Mock the connect method to succeed without password
-            mock_kp_manager.connect = Mock()
+            # Mock the connect_with_password_fallback method to succeed
+            mock_kp_manager.connect_with_password_fallback = Mock()
 
             # Capture stdout
             with patch("sys.stdout", new_callable=lambda: MagicMock()) as mock_stdout:
@@ -244,8 +238,7 @@ class TestMainFunctionWithPasswordLogic:
                 mock_kp_manager_class.assert_called_once_with(
                     "tests/secrets.kdbx", None
                 )
-                # Should try to connect without password first
-                mock_kp_manager.connect.assert_called_once_with(password=None)
+                mock_kp_manager.connect_with_password_fallback.assert_called_once()
                 mock_kp_manager.substitute_placeholders.assert_called_once_with(
                     '${"Test".Password}', strict=False
                 )
@@ -259,11 +252,9 @@ class TestMainFunctionWithPasswordLogic:
     @patch("keeenv.core.KeeenvConfig")
     @patch("keeenv.core.PathValidator.validate_file_path")
     @patch("keeenv.validation.SecurityValidator.validate_database_security")
-    @patch("keeenv.core.getpass.getpass")
     @patch("sys.argv", ["keeenv", "eval"])
     def test_main_success_with_password_required(
         self,
-        mock_getpass,
         mock_security,
         mock_path_validator,
         mock_config_class,
@@ -286,8 +277,6 @@ class TestMainFunctionWithPasswordLogic:
         mock_config_class.return_value = mock_config_instance
 
         mock_path_validator.return_value = Path("tests/secrets.kdbx")
-        mock_getpass.return_value = "password123"
-
         # Mock KeePassManager and its methods
         mock_kp_manager = Mock(spec=KeePassManager)
         mock_kp_manager.substitute_placeholders.return_value = "secret123"
@@ -296,12 +285,8 @@ class TestMainFunctionWithPasswordLogic:
         with patch(
             "keeenv.core.KeePassManager", return_value=mock_kp_manager
         ) as mock_kp_manager_class:
-            # Mock connect method: first call (without password) raises KeePassCredentialsError,
-            # second call (with password) succeeds
-            mock_kp_manager.connect.side_effect = [
-                KeePassCredentialsError("Invalid password"),
-                None,  # Second call succeeds
-            ]
+            # Mock connect_with_password_fallback to succeed
+            mock_kp_manager.connect_with_password_fallback = Mock()
 
             # Capture stdout
             with patch("sys.stdout", new_callable=lambda: MagicMock()) as mock_stdout:
@@ -311,10 +296,7 @@ class TestMainFunctionWithPasswordLogic:
                 mock_kp_manager_class.assert_called_once_with(
                     "tests/secrets.kdbx", None
                 )
-                # Should try to connect without password first, then with password
-                assert mock_kp_manager.connect.call_count == 2
-                mock_kp_manager.connect.assert_any_call(password=None)
-                mock_kp_manager.connect.assert_any_call("password123")
+                mock_kp_manager.connect_with_password_fallback.assert_called_once()
                 mock_kp_manager.substitute_placeholders.assert_called_once_with(
                     '${"Test".Password}', strict=False
                 )
@@ -328,11 +310,9 @@ class TestMainFunctionWithPasswordLogic:
     @patch("keeenv.core.KeeenvConfig")
     @patch("keeenv.core.PathValidator.validate_file_path")
     @patch("keeenv.validation.SecurityValidator.validate_database_security")
-    @patch("keeenv.core.getpass.getpass")
     @patch("sys.argv", ["keeenv", "eval"])
     def test_main_password_prompt_called_only_when_needed(
         self,
-        mock_getpass,
         mock_security,
         mock_path_validator,
         mock_config_class,
@@ -364,8 +344,8 @@ class TestMainFunctionWithPasswordLogic:
         with patch(
             "keeenv.core.KeePassManager", return_value=mock_kp_manager
         ) as mock_kp_manager_class:
-            # Mock connect method to succeed without password
-            mock_kp_manager.connect = Mock(return_value=None)
+            # Mock connect_with_password_fallback to succeed
+            mock_kp_manager.connect_with_password_fallback = Mock(return_value=None)
 
             # Capture stdout
             with patch("sys.stdout", new_callable=lambda: MagicMock()) as mock_stdout:
@@ -375,10 +355,7 @@ class TestMainFunctionWithPasswordLogic:
                 mock_kp_manager_class.assert_called_once_with(
                     "tests/secrets.kdbx", None
                 )
-                # Should try to connect without password first and succeed
-                mock_kp_manager.connect.assert_called_once_with(password=None)
-                # Password prompt should NOT be called
-                mock_getpass.assert_not_called()
+                mock_kp_manager.connect_with_password_fallback.assert_called_once()
                 mock_kp_manager.substitute_placeholders.assert_called_once_with(
                     '${"Test".Password}', strict=False
                 )
@@ -440,7 +417,7 @@ class TestCmdAddFunctionWithPasswordLogic:
 
         # Call _cmd_add
         _cmd_add(
-            config_path="test_config.toml",
+            config_path="test_config.ini",
             env_var="TEST_VAR",
             secret="secret123",
             title=None,
@@ -453,8 +430,7 @@ class TestCmdAddFunctionWithPasswordLogic:
 
         # Verify KeePassManager was created and used correctly
         mock_kp_manager_class.assert_called_once_with("tests/secrets.kdbx", None)
-        # Should try to connect without password first
-        mock_kp_manager.connect.assert_called_once_with(password=None)
+        mock_kp_manager.connect_with_password_fallback.assert_called_once()
         mock_kp_manager.find_entry.assert_called_once_with(
             "TEST_VAR", create_if_missing=True
         )
@@ -467,10 +443,8 @@ class TestCmdAddFunctionWithPasswordLogic:
     @patch("keeenv.core.KeeenvConfig")
     @patch("keeenv.core.PathValidator.validate_file_path")
     @patch("keeenv.validation.SecurityValidator.validate_database_security")
-    @patch("keeenv.core.getpass.getpass")
     def test_cmd_add_success_with_password_required(
         self,
-        mock_getpass,
         mock_security,
         mock_path_validator,
         mock_config_class,
@@ -494,7 +468,6 @@ class TestCmdAddFunctionWithPasswordLogic:
         mock_config_class.return_value = mock_config_instance
 
         mock_path_validator.return_value = Path("tests/secrets.kdbx")
-        mock_getpass.return_value = "password123"
 
         # Mock KeePassManager and its methods
         mock_kp_manager = Mock(spec=KeePassManager)
@@ -511,16 +484,12 @@ class TestCmdAddFunctionWithPasswordLogic:
 
         mock_kp_manager_class.return_value = mock_kp_manager
 
-        # Mock connect method: first call (without password) raises KeePassCredentialsError,
-        # second call (with password) succeeds
-        mock_kp_manager.connect.side_effect = [
-            KeePassCredentialsError("Invalid password"),
-            None,  # Second call succeeds
-        ]
+        # Mock connect_with_password_fallback to succeed
+        mock_kp_manager.connect_with_password_fallback = Mock()
 
         # Call _cmd_add
         _cmd_add(
-            config_path="test_config.toml",
+            config_path="test_config.ini",
             env_var="TEST_VAR",
             secret="secret123",
             title=None,
@@ -533,10 +502,7 @@ class TestCmdAddFunctionWithPasswordLogic:
 
         # Verify KeePassManager was created and used correctly
         mock_kp_manager_class.assert_called_once_with("tests/secrets.kdbx", None)
-        # Should try to connect without password first, then with password
-        assert mock_kp_manager.connect.call_count == 2
-        mock_kp_manager.connect.assert_any_call(password=None)
-        mock_kp_manager.connect.assert_any_call("password123")
+        mock_kp_manager.connect_with_password_fallback.assert_called_once()
         mock_kp_manager.find_entry.assert_called_once_with(
             "TEST_VAR", create_if_missing=True
         )
@@ -590,12 +556,12 @@ class TestCmdAddFunctionWithPasswordLogic:
 
         mock_kp_manager_class.return_value = mock_kp_manager
 
-        # Mock connect method to succeed without password
-        mock_kp_manager.connect = Mock(return_value=None)
+        # Mock connect_with_password_fallback to succeed
+        mock_kp_manager.connect_with_password_fallback = Mock(return_value=None)
 
         # Call _cmd_add
         _cmd_add(
-            config_path="test_config.toml",
+            config_path="test_config.ini",
             env_var="TEST_VAR",
             secret="secret123",
             title=None,
@@ -608,12 +574,7 @@ class TestCmdAddFunctionWithPasswordLogic:
 
         # Verify KeePassManager was created and used correctly
         mock_kp_manager_class.assert_called_once_with("tests/secrets.kdbx", None)
-        # Should try to connect without password first and succeed
-        mock_kp_manager.connect.assert_called_once_with(password=None)
-        # Password prompt should NOT be called
-        # Note: We can't directly mock getpass here since it's called inside _cmd_add
-        # But we can verify that connect was only called once with None
-        assert mock_kp_manager.connect.call_count == 1
+        mock_kp_manager.connect_with_password_fallback.assert_called_once()
         mock_kp_manager.find_entry.assert_called_once_with(
             "TEST_VAR", create_if_missing=True
         )
