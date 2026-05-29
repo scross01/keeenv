@@ -1,8 +1,7 @@
 # Change Log
 
-## v0.4.0
+## v0.5.0
 
-- Environment variable names now preserve their exact casing from `.keeenv` instead of being forced to uppercase.
 - Unexpected CLI errors now log details and a traceback to stderr instead of failing silently.
 - Fixed `run` command using `shell=True`, which could interpret shell metacharacters in arguments.
 - Fixed `add` command not persisting new entries to the config file on disk.
@@ -10,6 +9,10 @@
 - Fixed `list` command exiting with code 0 on config errors — now exits with code 1.
 - Normalized whitespace stripping behavior between interactive and piped secret input.
 - Removed warning for world-readable database files since KeepassXC allows this permission.
+
+## v0.4.0
+
+- Removed enforcement of uppercase env vars to support Terraform TF_VAR style env settings.
 
 ## v0.3.0
 

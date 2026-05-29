@@ -344,6 +344,42 @@ Note: setting additional attributes using keepassxc-cli is not currently support
 
 **Attribute Names**: Use consistent naming for custom attributes. Attribute names must start with a letter or underscore and only alphanumeric characters, spaces, and underscores are allowed.
 
-**Environment Variables**: Use uppercase names for environment variables by convention.
+**Environment Variables**: Environment variable names preserve their exact case from the `.keeenv` configuration file. While uppercase names are conventional, keeenv supports mixed case for tools like Terraform that require specific case patterns (e.g., `TF_VAR_api_key`).
 
 **Configuration Location**: Keep your `.keeenv` file in your project root.
+
+### Terraform TF_VAR Support
+
+keeenv preserves the exact case of environment variable names, making it compatible with Terraform's `TF_VAR` prefix convention. Terraform automatically populates variables from environment variables that are prefixed with `TF_VAR_` followed by the variable name in the exact case as defined in your Terraform configuration.
+
+For example, if your Terraform configuration defines:
+
+```hcl
+variable "api_key" {
+  type = string
+}
+
+variable "service_account" {
+  type = string
+}
+```
+
+You can set these in your `.keeenv` file with the exact case:
+
+```ini
+[keepass]
+database = secrets.kdbx
+
+[env]
+TF_VAR_api_key = ${"My API Keys".Password}
+TF_VAR_service_account = ${"My API Keys"."Service Account Key"}
+```
+
+Then export and run Terraform:
+
+```shell
+eval "$(keeenv eval)"
+terraform apply
+```
+
+Note: Terraform expects the variable name after `TF_VAR_` to match the exact case of the variable definition in your `.tf` files. Using `TF_VAR_api_key` will set the `api_key` variable, while `TF_VAR_API_KEY` would not match (unless you have a variable named `API_KEY`).
