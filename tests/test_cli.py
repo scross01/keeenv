@@ -372,8 +372,7 @@ def test_list_shows_env_var_names(tmp_path: Path):
     """Test that `keeenv list` displays environment variable names from [env] section."""
     cfg_path = tmp_path / ".keeenv"
     cfg_path.write_text(
-        textwrap.dedent(
-            """
+        textwrap.dedent("""
             [keepass]
             database = ./test.kdbx
             
@@ -381,8 +380,7 @@ def test_list_shows_env_var_names(tmp_path: Path):
             API_KEY = ${"MyAPI".password}
             DATABASE_URL = ${"DB".url}
             SECRET_TOKEN = ${"Token".notes}
-            """
-        ).strip(),
+            """).strip(),
         encoding="utf-8",
     )
 
@@ -405,14 +403,12 @@ def test_list_empty_env_section_shows_message(tmp_path: Path):
     """Test that `keeenv list` shows appropriate message when [env] section is empty."""
     cfg_path = tmp_path / ".keeenv"
     cfg_path.write_text(
-        textwrap.dedent(
-            """
+        textwrap.dedent("""
             [keepass]
             database = ./test.kdbx
             
             [env]
-            """
-        ).strip(),
+            """).strip(),
         encoding="utf-8",
     )
 
@@ -427,12 +423,10 @@ def test_list_no_env_section_shows_message(tmp_path: Path):
     """Test that `keeenv list` shows appropriate message when [env] section is missing."""
     cfg_path = tmp_path / ".keeenv"
     cfg_path.write_text(
-        textwrap.dedent(
-            """
+        textwrap.dedent("""
             [keepass]
             database = ./test.kdbx
-            """
-        ).strip(),
+            """).strip(),
         encoding="utf-8",
     )
 
@@ -456,8 +450,7 @@ def test_list_preserves_variable_case(tmp_path: Path):
     """Test that `keeenv list` preserves the case of environment variable names."""
     cfg_path = tmp_path / ".keeenv"
     cfg_path.write_text(
-        textwrap.dedent(
-            """
+        textwrap.dedent("""
             [keepass]
             database = ./test.kdbx
             
@@ -465,8 +458,7 @@ def test_list_preserves_variable_case(tmp_path: Path):
             MixedCase_VAR = ${"Entry".password}
             ALL_CAPS = ${"Entry".password}
             snake_case = ${"Entry".password}
-            """
-        ).strip(),
+            """).strip(),
         encoding="utf-8",
     )
 
@@ -484,8 +476,7 @@ def test_list_multiple_variables_each_on_new_line(tmp_path: Path):
     """Test that `keeenv list` shows each variable name on a separate line."""
     cfg_path = tmp_path / ".keeenv"
     cfg_path.write_text(
-        textwrap.dedent(
-            """
+        textwrap.dedent("""
             [keepass]
             database = ./test.kdbx
             
@@ -493,8 +484,7 @@ def test_list_multiple_variables_each_on_new_line(tmp_path: Path):
             VAR1 = ${"Entry1".password}
             VAR2 = ${"Entry2".password}
             VAR3 = ${"Entry3".password}
-            """
-        ).strip(),
+            """).strip(),
         encoding="utf-8",
     )
 
@@ -510,16 +500,14 @@ def test_run_executes_command_with_env_vars(tmp_path: Path):
 
     cfg_path = tmp_path / ".keeenv"
     cfg_path.write_text(
-        textwrap.dedent(
-            f"""
+        textwrap.dedent(f"""
             [keepass]
             database = {kdbx}
             
             [env]
             TEST_VAR = test_value
             ANOTHER_VAR = another_value
-            """
-        ).strip(),
+            """).strip(),
         encoding="utf-8",
     )
 
@@ -542,15 +530,13 @@ def test_run_executes_command_with_env_vars_quoted_args(tmp_path: Path):
 
     cfg_path = tmp_path / ".keeenv"
     cfg_path.write_text(
-        textwrap.dedent(
-            f"""
+        textwrap.dedent(f"""
             [keepass]
             database = {kdbx}
             
             [env]
             TEST_VAR = test_value
-            """
-        ).strip(),
+            """).strip(),
         encoding="utf-8",
     )
 
@@ -573,16 +559,14 @@ def test_run_executes_complex_command(tmp_path: Path):
 
     cfg_path = tmp_path / ".keeenv"
     cfg_path.write_text(
-        textwrap.dedent(
-            f"""
+        textwrap.dedent(f"""
             [keepass]
             database = {kdbx}
             
             [env]
             API_KEY = secret123
             BASE_URL = https://api.example.com
-            """
-        ).strip(),
+            """).strip(),
         encoding="utf-8",
     )
 
@@ -624,15 +608,13 @@ def test_run_with_verbose_logging(tmp_path: Path):
 
     cfg_path = tmp_path / ".keeenv"
     cfg_path.write_text(
-        textwrap.dedent(
-            f"""
+        textwrap.dedent(f"""
             [keepass]
             database = {kdbx}
             
             [env]
             TEST_VAR = test_value
-            """
-        ).strip(),
+            """).strip(),
         encoding="utf-8",
     )
 
@@ -657,14 +639,12 @@ def test_run_empty_env_section_executes_command(tmp_path: Path):
 
     cfg_path = tmp_path / ".keeenv"
     cfg_path.write_text(
-        textwrap.dedent(
-            f"""
+        textwrap.dedent(f"""
             [keepass]
             database = {kdbx}
             
             [env]
-            """
-        ).strip(),
+            """).strip(),
         encoding="utf-8",
     )
 

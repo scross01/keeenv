@@ -13,10 +13,10 @@ keeenv = "keeenv.main:main"
 
 [dependency-groups]
 dev = [
-    "black>=25.1.0",
+    "black>=26.5.1",
     "flake8>=7.3.0",
-    "pytest>=8.0.0",
-    "pytest-cov>=6.2.1",
+    "pytest>=9.0.3",
+    "pytest-cov>=7.1.0",
 ]
 
 [build-system]
@@ -25,3 +25,6 @@ build-backend = "hatchling.build"
 
 [tool.hatch.version]
 path = "keeenv/__init__.py"
+
+[tool.black]
+target-version = ["py311"]

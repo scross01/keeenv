@@ -1,5 +1,9 @@
 # Change Log
 
+## v0.4.0
+
+- Removed warning for world-readable database files since KeepassXC allows this permission.
+
 ## v0.3.0
 
 - Added `eval` subcommand to generate the environment variables.
