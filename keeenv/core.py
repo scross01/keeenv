@@ -6,6 +6,7 @@ import getpass
 import logging
 import os
 import shlex
+import subprocess
 import sys
 
 from keeenv.config import KeeenvConfig
@@ -538,7 +539,9 @@ def _cmd_list(*, config_path: str) -> None:
             for var_name in env_vars.keys():
                 print(var_name)
             logger.info(
-                "Listed %d environment variable(s) from %s", len(env_vars), config_path
+                "Listed %d environment variable(s) from %s",
+                len(env_vars),
+                config_path,
             )
         else:
             print("No environment variables found in [env] section")
@@ -559,9 +562,6 @@ def _cmd_run(*, config_path: str, command: list[str]) -> None:
     - Execute the specified command in a child process with those environment variables
     - Forward the exit code of the child process
     """
-    import subprocess
-    import os
-
     logger = logging.getLogger(__name__)
 
     try:
@@ -588,7 +588,7 @@ def _cmd_run(*, config_path: str, command: list[str]) -> None:
                     final_value = kp_manager.substitute_placeholders(
                         value_template, strict=True
                     )
-                    env_vars[var_name.upper()] = final_value
+                    env_vars[var_name] = final_value
 
             # Execute the command with the environment variables
             logger.info("Executing command: %s", " ".join(command))
@@ -721,9 +721,7 @@ def main() -> None:
                         value_template, strict=strict_mode
                     )
                     # Use shlex.quote for safe shell exporting
-                    exports.append(
-                        f"export {var_name.upper()}={shlex.quote(final_value)}"
-                    )
+                    exports.append(f"export {var_name}={shlex.quote(final_value)}")
 
             # Print export commands
             if exports:

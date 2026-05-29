@@ -35,7 +35,10 @@ class KeePassManager:
     """
 
     def __init__(
-        self, db_path: str, keyfile_path: Optional[str] = None, pykeepass_class=None
+        self,
+        db_path: str,
+        keyfile_path: Optional[str] = None,
+        pykeepass_class=None,
     ):
         """
         Initialize KeePassManager with database configuration.
@@ -233,7 +236,12 @@ class KeePassManager:
 
             # Attribute not found -> let it fall through to generic wrapper for test expectation
             raise AttributeError(validated_attr)
-        except (ValidationError, KeePassCredentialsError, SecurityError, ConfigError):
+        except (
+            ValidationError,
+            KeePassCredentialsError,
+            SecurityError,
+            ConfigError,
+        ):
             # Preserve explicit domain exceptions that should map directly
             raise
         except Exception as e:
@@ -347,7 +355,9 @@ class KeePassManager:
                 else:
                     # For ValidationError, only log in non-strict mode
                     logger.warning(
-                        "Failed to resolve placeholder %s: %s", placeholder, str(e)
+                        "Failed to resolve placeholder %s: %s",
+                        placeholder,
+                        str(e),
                     )
                     return ""
 
@@ -405,10 +415,8 @@ class KeePassManager:
         if not self.kp:
             raise KeePassError("Database not connected. Call connect() first.")
         parent_group = (
-            group
-            if group is not None
-            else self.kp.root_group  # pyright: ignore[reportAttributeAccessIssue]
-        )
+            group if group is not None else self.kp.root_group
+        )  # pyright: ignore[reportAttributeAccessIssue]
         entry = self.kp.add_entry(
             parent_group,
             title=validated_title,

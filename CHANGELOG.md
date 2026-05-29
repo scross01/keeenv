@@ -2,6 +2,8 @@
 
 ## v0.4.0
 
+- Environment variable names now preserve their exact casing from `.keeenv` instead of being forced to uppercase.
+- Unexpected CLI errors now log details and a traceback to stderr instead of failing silently.
 - Fixed `run` command using `shell=True`, which could interpret shell metacharacters in arguments.
 - Fixed `add` command not persisting new entries to the config file on disk.
 - Fixed `add` command placing entries in the root group even when a group path was specified.

@@ -215,15 +215,13 @@ class TestSubstitutePlaceholders:
         """Test substituting placeholders when not connected."""
         manager.disconnect()
         with pytest.raises(KeePassError):
-            manager.substitute_placeholders('${\"test\".\"password\"}')
+            manager.substitute_placeholders('${"test"."password"}')
 
     def test_substitute_placeholders_success(self, connected_manager):
         """Test successful placeholder substitution."""
         connected_manager.get_secret = Mock(return_value="secret123")
 
-        result = connected_manager.substitute_placeholders(
-            '${\"test\".\"password\"}'
-        )
+        result = connected_manager.substitute_placeholders('${"test"."password"}')
 
         assert result == "secret123"
         connected_manager.get_secret.assert_called_once_with("test", "password")
@@ -235,12 +233,12 @@ class TestFormatPlaceholder:
     def test_format_placeholder_standard_attr(self, manager):
         """Test placeholder formatting with standard attribute."""
         result = manager.format_placeholder("test_entry", "password")
-        assert result == '${\"test_entry\".password}'
+        assert result == '${"test_entry".password}'
 
     def test_format_placeholder_custom_attr(self, manager):
         """Test placeholder formatting with custom attribute."""
         result = manager.format_placeholder("test_entry", "API Key")
-        assert result == '${\"test_entry\".\"API Key\"}'
+        assert result == '${"test_entry"."API Key"}'
 
 
 class TestSaveDatabase:

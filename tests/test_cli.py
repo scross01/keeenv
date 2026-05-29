@@ -196,7 +196,9 @@ def test_init_update_existing_config(tmp_path: Path):
     # Simulate: choose Update 'u', then accept default current db (press Enter), then keyfile blank
     input_text = "u\n\n\n"
     proc = run_cli(
-        ["--config", str(initial_cfg), "init"], cwd=tmp_path, input_text=input_text
+        ["--config", str(initial_cfg), "init"],
+        cwd=tmp_path,
+        input_text=input_text,
     )
     assert proc.returncode in (0, 1) or proc.stderr == ""
     # Should remain valid and contain database (either same or updated)
@@ -217,7 +219,8 @@ def test_init_overwrite_existing_config_with_force(tmp_path: Path):
     kdbx = tmp_path / "new.kdbx"
     kdbx.write_text("dummy")
     run_cli(
-        ["--config", str(cfg), "init", "--kdbx", str(kdbx), "--force"], cwd=tmp_path
+        ["--config", str(cfg), "init", "--kdbx", str(kdbx), "--force"],
+        cwd=tmp_path,
     )
     assert cfg.exists()
     content = read_config(cfg)
@@ -375,7 +378,7 @@ def test_list_shows_env_var_names(tmp_path: Path):
         textwrap.dedent("""
             [keepass]
             database = ./test.kdbx
-            
+
             [env]
             API_KEY = ${"MyAPI".password}
             DATABASE_URL = ${"DB".url}
@@ -406,7 +409,7 @@ def test_list_empty_env_section_shows_message(tmp_path: Path):
         textwrap.dedent("""
             [keepass]
             database = ./test.kdbx
-            
+
             [env]
             """).strip(),
         encoding="utf-8",
@@ -453,7 +456,7 @@ def test_list_preserves_variable_case(tmp_path: Path):
         textwrap.dedent("""
             [keepass]
             database = ./test.kdbx
-            
+
             [env]
             MixedCase_VAR = ${"Entry".password}
             ALL_CAPS = ${"Entry".password}
@@ -479,7 +482,7 @@ def test_list_multiple_variables_each_on_new_line(tmp_path: Path):
         textwrap.dedent("""
             [keepass]
             database = ./test.kdbx
-            
+
             [env]
             VAR1 = ${"Entry1".password}
             VAR2 = ${"Entry2".password}
@@ -503,7 +506,7 @@ def test_run_executes_command_with_env_vars(tmp_path: Path):
         textwrap.dedent(f"""
             [keepass]
             database = {kdbx}
-            
+
             [env]
             TEST_VAR = test_value
             ANOTHER_VAR = another_value
@@ -533,7 +536,7 @@ def test_run_executes_command_with_env_vars_quoted_args(tmp_path: Path):
         textwrap.dedent(f"""
             [keepass]
             database = {kdbx}
-            
+
             [env]
             TEST_VAR = test_value
             """).strip(),
@@ -541,7 +544,8 @@ def test_run_executes_command_with_env_vars_quoted_args(tmp_path: Path):
     )
 
     proc = run_cli(
-        ["--config", str(cfg_path), "run", "echo", '"hello world"'], cwd=tmp_path
+        ["--config", str(cfg_path), "run", "echo", '"hello world"'],
+        cwd=tmp_path,
     )
 
     # Should fail due to invalid database, but should not show export commands
@@ -562,7 +566,7 @@ def test_run_executes_complex_command(tmp_path: Path):
         textwrap.dedent(f"""
             [keepass]
             database = {kdbx}
-            
+
             [env]
             API_KEY = secret123
             BASE_URL = https://api.example.com
@@ -611,7 +615,7 @@ def test_run_with_verbose_logging(tmp_path: Path):
         textwrap.dedent(f"""
             [keepass]
             database = {kdbx}
-            
+
             [env]
             TEST_VAR = test_value
             """).strip(),
@@ -619,7 +623,8 @@ def test_run_with_verbose_logging(tmp_path: Path):
     )
 
     proc = run_cli(
-        ["--config", str(cfg_path), "--verbose", "run", "echo", "test"], cwd=tmp_path
+        ["--config", str(cfg_path), "--verbose", "run", "echo", "test"],
+        cwd=tmp_path,
     )
 
     # Should fail due to invalid database, but verbose mode should show debug information
@@ -642,7 +647,7 @@ def test_run_empty_env_section_executes_command(tmp_path: Path):
         textwrap.dedent(f"""
             [keepass]
             database = {kdbx}
-            
+
             [env]
             """).strip(),
         encoding="utf-8",
