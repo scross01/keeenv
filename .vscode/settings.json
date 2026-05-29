@@ -10,5 +10,6 @@
         "tests"
     ],
     "python.testing.unittestEnabled": false,
-    "python.testing.pytestEnabled": true
+    "python.testing.pytestEnabled": true,
+    "todo-tree.ripgrep.ripgrep": "/opt/homebrew/bin/rg"
 }

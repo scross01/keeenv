@@ -2,6 +2,11 @@
 
 ## v0.4.0
 
+- Fixed `run` command using `shell=True`, which could interpret shell metacharacters in arguments.
+- Fixed `add` command not persisting new entries to the config file on disk.
+- Fixed `add` command placing entries in the root group even when a group path was specified.
+- Fixed `list` command exiting with code 0 on config errors — now exits with code 1.
+- Normalized whitespace stripping behavior between interactive and piped secret input.
 - Removed warning for world-readable database files since KeepassXC allows this permission.
 
 ## v0.3.0

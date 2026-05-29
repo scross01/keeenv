@@ -441,9 +441,9 @@ def test_list_config_file_not_found_shows_error():
     """Test that `keeenv list` shows error when config file doesn't exist."""
     proc = run_cli(["--config", "/nonexistent/path.keeenv", "list"])
 
-    # Should succeed but show error message
-    assert proc.returncode == 0
-    assert "Configuration file not found" in proc.stdout
+    # Should fail with non-zero exit and show error message
+    assert proc.returncode == 1
+    assert "Configuration file" in proc.stderr and "not found" in proc.stderr
 
 
 def test_list_preserves_variable_case(tmp_path: Path):

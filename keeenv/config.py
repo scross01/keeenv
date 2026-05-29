@@ -163,10 +163,10 @@ class KeeenvConfig:
         return config[ENV_SECTION]
 
     def set_env_var(self, var_name: str, value: str) -> None:
-        """Set an environment variable in the [env] section."""
+        """Set an environment variable in the [env] section and persist."""
         env_section = self.get_env_section()
         env_section[var_name] = value
-        self._config = self.get_config()  # Update cached config
+        self.save_config()
 
     def get_env_vars(self) -> dict[str, str]:
         """Get all environment variables from the [env] section."""

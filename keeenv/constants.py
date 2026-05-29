@@ -26,10 +26,6 @@ ERROR_CONFIG_FILE_NOT_FOUND = "Configuration file '{config_path}' not found."
 ERROR_SECTION_MISSING = "Section '[{section}]' missing in '{config_file}'"
 ERROR_KEY_MISSING = "'{key}' key missing in '[{section}]' section"
 ERROR_COULD_NOT_READ_PASSWORD = "Could not read password"
-ERROR_SECTION_MISSING_NO_VARS = (
-    "Section '[{section}]' missing in '{config_file}'. No variables to process."
-)
-
 # Configuration constants
 CONFIG_FILENAME = ".keeenv"
 KEEPASS_SECTION = "keepass"
