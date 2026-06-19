@@ -218,6 +218,34 @@ def _prompt_secret(prompt: str) -> str:
         return ""
 
 
+def _create_kdbx_database(
+    kdbx_path: str,
+    password: str | None = None,
+    keyfile: str | None = None,
+) -> None:
+    """Create a new KeePass database at kdbx_path.
+
+    Exactly one of password or keyfile must be provided.
+    Raises KeePassError on failure.
+    """
+    logger = logging.getLogger(__name__)
+    os.makedirs(os.path.dirname(kdbx_path) or ".", exist_ok=True)
+    try:
+        from pykeepass import create_database
+
+        if password is not None:
+            create_database(kdbx_path, password=password)
+        else:
+            create_database(kdbx_path, keyfile=keyfile)
+        logger.info(
+            "Created new KeePass database at %s%s",
+            kdbx_path,
+            f" (keyfile={keyfile})" if keyfile else "",
+        )
+    except Exception as e:
+        raise KeePassError("Failed to create KeePass database", e)
+
+
 def _init_config_interactive(
     target_path: str,
     kdbx: str | None,
@@ -344,18 +372,7 @@ def _init_config_interactive(
                     raise ConfigError(
                         "--no-password requires --keyfile to be provided."
                     )
-                try:
-                    from pykeepass import create_database
-
-                    os.makedirs(os.path.dirname(kdbx_path) or ".", exist_ok=True)
-                    create_database(kdbx_path, keyfile=keyfile)
-                    logger.info(
-                        "Created new KeePass database at %s (no password, keyfile=%s)",
-                        kdbx_path,
-                        keyfile,
-                    )
-                except Exception as e:
-                    raise KeePassError("Failed to create KeePass database", e)
+                _create_kdbx_database(kdbx_path, keyfile=keyfile)
             else:
                 pw1 = _prompt_secret("Create master password: ").strip()
                 pw2 = _prompt_secret("Confirm master password: ").strip()
@@ -363,14 +380,7 @@ def _init_config_interactive(
                     raise ConfigError("Master password cannot be empty.")
                 if pw1 != pw2:
                     raise ConfigError("Passwords do not match.")
-                try:
-                    from pykeepass import create_database
-
-                    os.makedirs(os.path.dirname(kdbx_path) or ".", exist_ok=True)
-                    create_database(kdbx_path, password=pw1)
-                    logger.info("Created new KeePass database at %s", kdbx_path)
-                except Exception as e:
-                    raise KeePassError("Failed to create KeePass database", e)
+                _create_kdbx_database(kdbx_path, password=pw1)
         else:
             choice = (
                 _prompt_input(
@@ -385,18 +395,7 @@ def _init_config_interactive(
                         raise ConfigError(
                             "--no-password requires --keyfile to be provided."
                         )
-                    try:
-                        from pykeepass import create_database
-
-                        os.makedirs(os.path.dirname(kdbx_path) or ".", exist_ok=True)
-                        create_database(kdbx_path, keyfile=keyfile)
-                        logger.info(
-                            "Created new KeePass database at %s (no password, keyfile=%s)",
-                            kdbx_path,
-                            keyfile,
-                        )
-                    except Exception as e:
-                        raise KeePassError("Failed to create KeePass database", e)
+                    _create_kdbx_database(kdbx_path, keyfile=keyfile)
                 else:
                     pw1 = _prompt_secret("Create master password: ").strip()
                     pw2 = _prompt_secret("Confirm master password: ").strip()
@@ -404,14 +403,7 @@ def _init_config_interactive(
                         raise ConfigError("Master password cannot be empty.")
                     if pw1 != pw2:
                         raise ConfigError("Passwords do not match.")
-                    try:
-                        from pykeepass import create_database
-
-                        os.makedirs(os.path.dirname(kdbx_path) or ".", exist_ok=True)
-                        create_database(kdbx_path, password=pw1)
-                        logger.info("Created new KeePass database at %s", kdbx_path)
-                    except Exception as e:
-                        raise KeePassError("Failed to create KeePass database", e)
+                    _create_kdbx_database(kdbx_path, password=pw1)
             else:
                 raise ConfigError(f"Database '{kdbx_path}' not found. Aborting.")
     elif yes and not force:
