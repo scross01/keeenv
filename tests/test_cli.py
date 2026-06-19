@@ -228,6 +228,100 @@ def test_init_overwrite_existing_config_with_force(tmp_path: Path):
     assert str(kdbx) in content
 
 
+def test_init_yes_creates_config_without_kdbx(tmp_path: Path):
+    """Test that -y/--yes creates a config file pointing to a non-existent kdbx."""
+    cfg_path = tmp_path / ".keeenv"
+    kdbx = tmp_path / "newdb.kdbx"
+    # Provide keyfile path (even though it doesn't exist yet for this test)
+    keyfile = tmp_path / "test.key"
+    # -y should fail because kdbx doesn't exist and we're not prompting
+    proc = run_cli(
+        [
+            "--config",
+            str(cfg_path),
+            "init",
+            "--kdbx",
+            str(kdbx),
+            "--keyfile",
+            str(keyfile),
+            "-y",
+        ],
+        cwd=tmp_path,
+    )
+    # Should fail because kdbx doesn't exist and -y can't create it
+    assert proc.returncode != 0
+
+
+def test_init_yes_fails_when_kdbx_already_exists(tmp_path: Path):
+    """Test that -y/--yes fails if kdbx already exists (without --force)."""
+    kdbx = tmp_path / "existing.kdbx"
+    kdbx.write_text("dummy")
+    cfg_path = tmp_path / ".keeenv"
+    proc = run_cli(
+        [
+            "--config",
+            str(cfg_path),
+            "init",
+            "--kdbx",
+            str(kdbx),
+            "-y",
+        ],
+        cwd=tmp_path,
+    )
+    # Should fail because kdbx exists and -y is used without --force
+    assert proc.returncode != 0
+    assert "already exists" in proc.stderr.lower()
+
+
+def test_init_yes_with_force_overwrites_existing_kdbx(tmp_path: Path):
+    """Test that -y/--yes with --force succeeds when kdbx already exists."""
+    kdbx = tmp_path / "existing.kdbx"
+    kdbx.write_text("dummy")
+    keyfile = tmp_path / "test.key"
+    keyfile.write_text("keyfile content")
+    cfg_path = tmp_path / ".keeenv"
+    proc = run_cli(
+        [
+            "--config",
+            str(cfg_path),
+            "init",
+            "--kdbx",
+            str(kdbx),
+            "--keyfile",
+            str(keyfile),
+            "-y",
+            "--force",
+        ],
+        cwd=tmp_path,
+    )
+    # Should succeed because --force is used
+    assert proc.returncode == 0
+    assert cfg_path.exists()
+    content = read_config(cfg_path)
+    assert "database =" in content
+    assert str(kdbx) in content
+
+
+def test_init_nopassword_requires_keyfile(tmp_path: Path):
+    """Test that --no-password fails without --keyfile."""
+    cfg_path = tmp_path / ".keeenv"
+    kdbx = tmp_path / "newdb.kdbx"
+    proc = run_cli(
+        [
+            "--config",
+            str(cfg_path),
+            "init",
+            "--kdbx",
+            str(kdbx),
+            "--no-password",
+        ],
+        cwd=tmp_path,
+    )
+    # Should fail because --no-password requires --keyfile
+    assert proc.returncode != 0
+    assert "no-password requires --keyfile" in proc.stderr.lower()
+
+
 # --- Tests for `keeenv add` subcommand ---
 
 

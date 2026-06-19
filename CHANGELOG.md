@@ -1,5 +1,10 @@
 # Change Log
 
+## v0.6.0
+
+- Added `--no-password` option to `init` command to create .kdbx file with keyfile only.
+- Added `-y` option to `init` command to auto-accept creation of new .kdbx file.
+
 ## v0.5.1
 
 - Fixed `run` command failing when the command is quoted (e.g. `keeenv run "echo hello"`).
