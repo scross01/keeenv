@@ -7,8 +7,8 @@ from unittest.mock import Mock, patch
 import pytest
 from pykeepass.exceptions import CredentialsError as PyKPCredentialsError
 
-from keeenv.keepass import KeePassManager
 from keeenv.exceptions import KeePassError
+from keeenv.keepass import KeePassManager
 
 
 @pytest.fixture

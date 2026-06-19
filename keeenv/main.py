@@ -7,12 +7,13 @@ Main entry point for keeenv - Populate environment variables from Keepass
 # This CLI wrapper is responsible for exit codes.
 import logging
 import sys
+
 from keeenv.core import main as keeenv_main
 from keeenv.exceptions import (
     ConfigError,
     KeePassError,
-    ValidationError,
     SecurityError,
+    ValidationError,
 )
 
 logger = logging.getLogger(__name__)

@@ -17,7 +17,6 @@ from keeenv.exceptions import (
     ValidationError,
 )
 from keeenv.validation import PathValidator, SecurityValidator
-from typing import Optional
 
 
 class KeeenvConfig:
@@ -26,7 +25,7 @@ class KeeenvConfig:
     def __init__(self, config_path: str = CONFIG_FILENAME):
         """Initialize with configuration file path."""
         self.config_path = config_path
-        self._config: Optional[configparser.ConfigParser] = None
+        self._config: configparser.ConfigParser | None = None
 
     def _make_case_preserving_config(self) -> configparser.ConfigParser:
         """
@@ -70,7 +69,7 @@ class KeeenvConfig:
             try:
                 config.read(validated_path)
             except Exception as e:
-                raise ConfigError(f"Failed to parse config file: {str(e)}")
+                raise ConfigError(f"Failed to parse config file: {str(e)}") from None
 
             # Validate required sections
             if "keepass" not in config:
@@ -84,7 +83,7 @@ class KeeenvConfig:
             return config
 
         except ValidationError as e:
-            raise ConfigError(f"Configuration validation failed: {str(e)}")
+            raise ConfigError(f"Configuration validation failed: {str(e)}") from None
 
     def load_and_validate_config(self, config_path: str) -> configparser.ConfigParser:
         """Load and validate the configuration file."""
@@ -97,7 +96,7 @@ class KeeenvConfig:
     def validate_keepass_config(
         self,
         config: configparser.ConfigParser,
-    ) -> tuple[str, Optional[str]]:
+    ) -> tuple[str, str | None]:
         """Validate Keepass configuration and return validated paths."""
         if KEEPASS_SECTION not in config:
             raise ConfigSectionMissingError(
@@ -107,8 +106,8 @@ class KeeenvConfig:
             )
 
         keepass_config = config[KEEPASS_SECTION]
-        db_path: Optional[str] = keepass_config.get("database")
-        keyfile_path: Optional[str] = keepass_config.get("keyfile")
+        db_path: str | None = keepass_config.get("database")
+        keyfile_path: str | None = keepass_config.get("keyfile")
 
         if not db_path:
             raise ConfigKeyMissingError(
@@ -140,7 +139,7 @@ class KeeenvConfig:
             self._config = self.load_and_validate_config(self.config_path)
         return self._config
 
-    def save_config(self, config: Optional[configparser.ConfigParser] = None) -> None:
+    def save_config(self, config: configparser.ConfigParser | None = None) -> None:
         """Save configuration to file."""
         config_to_save = config or self._config
         if config_to_save is None:
@@ -152,7 +151,7 @@ class KeeenvConfig:
         except Exception as e:
             raise ConfigError(
                 f"Failed to write configuration file '{self.config_path}'", e
-            )
+            ) from None
 
     def get_env_section(self) -> configparser.SectionProxy:
         """Get the [env] section from configuration."""

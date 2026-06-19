@@ -2,17 +2,18 @@
 Tests for core functionality
 """
 
-import pytest
-import tempfile
 import configparser
-from unittest.mock import Mock, patch, MagicMock
+import tempfile
 from pathlib import Path
+from unittest.mock import MagicMock, Mock, patch
+
+import pytest
 
 from keeenv.config import KeeenvConfig
 from keeenv.core import (
-    main,
     _cmd_add,
     _cmd_run,
+    main,
 )
 from keeenv.exceptions import (
     ConfigError,
@@ -617,7 +618,7 @@ class TestCmdRunCommandParsing:
         mock_kp_manager_class,
         mock_subprocess_run,
     ):
-        """"echo hello" (single element) should be split to ['echo', 'hello']."""
+        """ "echo hello" (single element) should be split to ['echo', 'hello']."""
         mock_config = self._make_mock_config()
         mock_config_class.return_value = self._make_mock_config_instance(mock_config)
 
@@ -727,9 +728,7 @@ class TestCmdRunCommandParsing:
 
         mock_subprocess_run.assert_called_once()
         command_arg = mock_subprocess_run.call_args[0][0]
-        assert command_arg == ["ls"], (
-            f"Expected ['ls'] but got {command_arg}"
-        )
+        assert command_arg == ["ls"], f"Expected ['ls'] but got {command_arg}"
         mock_kp_manager.connect_with_password_fallback.assert_called_once()
         mock_kp_manager.disconnect.assert_called_once()
 
@@ -775,9 +774,11 @@ class TestCmdRunCommandParsing:
         mock_subprocess_run,
     ):
         """Env vars from KeePass should be passed to subprocess.run via env kwarg."""
-        mock_config = self._make_mock_config({
-            "SECRET": '${"Entry".Password}',
-        })
+        mock_config = self._make_mock_config(
+            {
+                "SECRET": '${"Entry".Password}',
+            }
+        )
         mock_config_class.return_value = self._make_mock_config_instance(mock_config)
 
         mock_kp_manager = Mock()
@@ -806,10 +807,12 @@ class TestCmdRunCommandParsing:
         mock_subprocess_run,
     ):
         """Env var case from .keeenv is preserved (no uppercase forcing)."""
-        mock_config = self._make_mock_config({
-            "TF_VAR_api_key": '${"Entry".Password}',
-            "mixedCaseVar": '${"Entry".Password}',
-        })
+        mock_config = self._make_mock_config(
+            {
+                "TF_VAR_api_key": '${"Entry".Password}',
+                "mixedCaseVar": '${"Entry".Password}',
+            }
+        )
         mock_config_class.return_value = self._make_mock_config_instance(mock_config)
 
         mock_kp_manager = Mock()
@@ -858,6 +861,4 @@ class TestCmdRunCommandParsing:
 
         mock_subprocess_run.assert_called_once()
         shell_kwarg = mock_subprocess_run.call_args[1].get("shell")
-        assert shell_kwarg is False, (
-            f"Expected shell=False but got shell={shell_kwarg}"
-        )
+        assert shell_kwarg is False, f"Expected shell=False but got shell={shell_kwarg}"

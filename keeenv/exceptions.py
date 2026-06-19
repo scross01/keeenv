@@ -2,13 +2,11 @@
 Custom exceptions for keeenv - Populate environment variables from Keepass
 """
 
-from typing import Optional
-
 
 class KeeenvError(Exception):
     """Base exception for keeenv errors."""
 
-    def __init__(self, message: str, original_exception: Optional[Exception] = None):
+    def __init__(self, message: str, original_exception: Exception | None = None):
         """
         Initialize keeenv error.
 
@@ -24,7 +22,7 @@ class KeeenvError(Exception):
 class ConfigError(KeeenvError):
     """Configuration-related errors."""
 
-    def __init__(self, message: str, original_exception: Optional[Exception] = None):
+    def __init__(self, message: str, original_exception: Exception | None = None):
         """
         Initialize configuration error.
 
@@ -56,7 +54,7 @@ class ConfigKeyMissingError(ConfigError):
 class KeePassError(KeeenvError):
     """KeePass-related errors."""
 
-    def __init__(self, message: str, original_exception: Optional[Exception] = None):
+    def __init__(self, message: str, original_exception: Exception | None = None):
         """
         Initialize KeePass error.
 
@@ -82,7 +80,7 @@ class KeePassEntryNotFoundError(KeePassError):
 class ValidationError(KeeenvError):
     """Input validation errors."""
 
-    def __init__(self, message: str, original_exception: Optional[Exception] = None):
+    def __init__(self, message: str, original_exception: Exception | None = None):
         """
         Initialize validation error.
 
@@ -114,7 +112,7 @@ class AttributeValidationError(ValidationError):
 class SecurityError(KeeenvError):
     """Security-related errors."""
 
-    def __init__(self, message: str, original_exception: Optional[Exception] = None):
+    def __init__(self, message: str, original_exception: Exception | None = None):
         """
         Initialize security error.
 

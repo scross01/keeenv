@@ -5,16 +5,15 @@ Input validation for keeenv - Populate environment variables from Keepass
 import logging
 import os
 import re
+from pathlib import Path
 
 from keeenv.exceptions import (
-    ValidationError,
-    PathValidationError,
     AttributeValidationError,
     DatabaseSecurityError,
     KeyfileSecurityError,
+    PathValidationError,
+    ValidationError,
 )
-from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +42,7 @@ class BaseValidator:
     """Base class for validators with common validation logic."""
 
     @staticmethod
-    def validate_non_empty_string(value: Optional[str], field_name: str) -> str:
+    def validate_non_empty_string(value: str | None, field_name: str) -> str:
         """Validate that a value is a non-empty string."""
         if not value or not isinstance(value, str):
             raise ValidationError(f"{field_name} must be a non-empty string")
@@ -72,7 +71,7 @@ class PathValidator(BaseValidator):
     """Validates file paths with security checks."""
 
     @staticmethod
-    def validate_file_path(path: Optional[str], must_exist: bool = True) -> Path:
+    def validate_file_path(path: str | None, must_exist: bool = True) -> Path:
         """
         Validate file path with security checks.
 
@@ -111,7 +110,7 @@ class EntryValidator(BaseValidator):
     """Validates KeePass entry titles."""
 
     @staticmethod
-    def validate_entry_title(title: Optional[str]) -> str:
+    def validate_entry_title(title: str | None) -> str:
         """
         Validate KeePass entry title.
 
@@ -154,7 +153,7 @@ class AttributeValidator(BaseValidator):
         return STANDARD_ATTRS
 
     @staticmethod
-    def is_standard_attr(name: Optional[str]) -> bool:
+    def is_standard_attr(name: str | None) -> bool:
         """
         Return True if the provided attribute name is a supported standard field.
         Accepts None (returns False) and is case-insensitive.
@@ -164,7 +163,7 @@ class AttributeValidator(BaseValidator):
         return name.lower() in AttributeValidator._get_supported_attributes()
 
     @staticmethod
-    def validate_attribute(attribute: Optional[str]) -> str:
+    def validate_attribute(attribute: str | None) -> str:
         """
         Validate KeePass attribute name.
 
@@ -201,7 +200,7 @@ class SecurityValidator:
 
     @staticmethod
     def validate_database_security(
-        db_path: str, keyfile_path: Optional[str] = None
+        db_path: str, keyfile_path: str | None = None
     ) -> None:
         """
         Validate file permissions and security.

@@ -13,10 +13,9 @@ keeenv = "keeenv.main:main"
 
 [dependency-groups]
 dev = [
-    "black>=26.5.1",
-    "flake8>=7.3.0",
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",
+    "ruff>=0.4.0",
 ]
 
 [build-system]
@@ -26,5 +25,29 @@ build-backend = "hatchling.build"
 [tool.hatch.version]
 path = "keeenv/__init__.py"
 
-[tool.black]
-target-version = ["py311"]
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "W",    # pycodestyle warnings
+    "I",    # isort
+    "UP",   # pyupgrade (modern Python syntax)
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+]
+ignore = [
+    "E501",   # line-too-long (handled by formatter)
+    "B904",   # raise-from — codebase uses constructor-based exception chaining
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011", "SIM300", "SIM117"]
+"keeenv/core.py" = ["SIM102"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

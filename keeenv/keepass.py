@@ -1,6 +1,10 @@
 import logging
 import re
 
+from pykeepass import PyKeePass
+from pykeepass.entry import Entry
+from pykeepass.exceptions import CredentialsError
+
 from keeenv.constants import (
     ERROR_DATABASE_OPEN_FAILED,
     ERROR_INVALID_PASSWORD_OR_KEYFILE,
@@ -17,10 +21,6 @@ from keeenv.exceptions import (
     ValidationError,
 )
 from keeenv.validation import AttributeValidator, EntryValidator
-from pykeepass import PyKeePass
-from pykeepass.entry import Entry
-from pykeepass.exceptions import CredentialsError
-from typing import Optional
 
 
 class KeePassManager:
@@ -37,7 +37,7 @@ class KeePassManager:
     def __init__(
         self,
         db_path: str,
-        keyfile_path: Optional[str] = None,
+        keyfile_path: str | None = None,
         pykeepass_class=None,
     ):
         """
@@ -55,7 +55,7 @@ class KeePassManager:
         self._is_connected = False
         self._pykeepass_class = pykeepass_class or PyKeePass
 
-    def connect(self, password: Optional[str] = None) -> None:
+    def connect(self, password: str | None = None) -> None:
         """
         Establish connection to KeePass database.
 
@@ -140,9 +140,7 @@ class KeePassManager:
             if has_find_groups:
                 return self.kp.find_groups(name=gname, group=parent_group, first=True)  # type: ignore[misc]
             # Manual scan fallback
-            for child in getattr(
-                parent_group, "subgroups", []
-            ):  # pyright: ignore[reportAttributeAccessIssue]
+            for child in getattr(parent_group, "subgroups", []):  # pyright: ignore[reportAttributeAccessIssue]
                 if getattr(child, "name", None) == gname:
                     return child
             return None
@@ -150,9 +148,7 @@ class KeePassManager:
         def _find_entry_in_group(group, entry_title):
             if has_find_entries:
                 return self.kp.find_entries(title=entry_title, group=group, first=True)  # type: ignore[misc]
-            for e in getattr(
-                group, "entries", []
-            ):  # pyright: ignore[reportAttributeAccessIssue]
+            for e in getattr(group, "entries", []):  # pyright: ignore[reportAttributeAccessIssue]
                 if getattr(e, "title", None) == entry_title:
                     return e
             return None
@@ -164,9 +160,7 @@ class KeePassManager:
             group_names = parts[:-1]
             entry_title = parts[-1]
 
-            current_group = (
-                self.kp.root_group if self.kp else None
-            )  # pyright: ignore[reportAttributeAccessIssue]
+            current_group = self.kp.root_group if self.kp else None  # pyright: ignore[reportAttributeAccessIssue]
             for gname in group_names:
                 next_group = _find_subgroup(current_group, gname)
 
@@ -199,7 +193,7 @@ class KeePassManager:
                 title,
             )  # pyright: ignore[reportAttributeAccessIssue]
 
-    def get_secret(self, title: str, attribute: str) -> Optional[str]:
+    def get_secret(self, title: str, attribute: str) -> str | None:
         """
         Fetch a specific attribute from a KeePass entry by title.
 
@@ -248,7 +242,7 @@ class KeePassManager:
             # Minimal context wrapper to match expected message in tests
             raise KeePassError(f"Failed to access entry '{title}': {str(e)}")
 
-    def _get_standard_attribute(self, entry, attribute: str) -> Optional[str]:
+    def _get_standard_attribute(self, entry, attribute: str) -> str | None:
         """Get standard attribute from KeePass entry using STANDARD_ATTRS membership."""
         attr_lower = attribute.lower()
         if attr_lower not in STANDARD_ATTRS:
@@ -256,19 +250,14 @@ class KeePassManager:
         # attr_lower is one of the standard names and matches the entry attribute
         return getattr(entry, attr_lower)  # pyright: ignore[reportAttributeAccessIssue]
 
-    def _get_custom_attribute(self, entry, attribute: str) -> Optional[str]:
+    def _get_custom_attribute(self, entry, attribute: str) -> str | None:
         """Get custom attribute from KeePass entry."""
         if (
             hasattr(entry, "custom_properties")
-            and isinstance(
-                entry.custom_properties, dict
-            )  # pyright: ignore[reportAttributeAccessIssue]
-            and attribute
-            in entry.custom_properties  # pyright: ignore[reportAttributeAccessIssue]
+            and isinstance(entry.custom_properties, dict)  # pyright: ignore[reportAttributeAccessIssue]
+            and attribute in entry.custom_properties  # pyright: ignore[reportAttributeAccessIssue]
         ):
-            return entry.custom_properties[
-                attribute
-            ]  # pyright: ignore[reportAttributeAccessIssue]
+            return entry.custom_properties[attribute]  # pyright: ignore[reportAttributeAccessIssue]
         return None
 
     def set_entry_attribute(
@@ -286,28 +275,18 @@ class KeePassManager:
             # Standard attributes via membership (attribute name matches entry field)
             attr_lower = attr.lower()
             if attr_lower in STANDARD_ATTRS:
-                setattr(
-                    entry, attr_lower, value
-                )  # pyright: ignore[reportAttributeAccessIssue]
+                setattr(entry, attr_lower, value)  # pyright: ignore[reportAttributeAccessIssue]
                 return
 
             # custom property path
-            if hasattr(
-                entry, "set_custom_property"
-            ):  # pyright: ignore[reportAttributeAccessIssue]
-                getattr(entry, "set_custom_property")(original_attr, value)  # type: ignore[misc]
+            if hasattr(entry, "set_custom_property"):  # pyright: ignore[reportAttributeAccessIssue]
+                entry.set_custom_property(original_attr, value)  # type: ignore[misc]
             else:
-                has_props = hasattr(
-                    entry, "custom_properties"
-                )  # pyright: ignore[reportAttributeAccessIssue]
-                props_is_dict = has_props and isinstance(
-                    getattr(entry, "custom_properties"), dict
-                )  # pyright: ignore[reportAttributeAccessIssue]
+                has_props = hasattr(entry, "custom_properties")  # pyright: ignore[reportAttributeAccessIssue]
+                props_is_dict = has_props and isinstance(entry.custom_properties, dict)  # pyright: ignore[reportAttributeAccessIssue]
                 if not props_is_dict:
-                    setattr(entry, "custom_properties", {})  # type: ignore[misc]
-                entry.custom_properties[original_attr] = (
-                    value  # pyright: ignore[reportAttributeAccessIssue]
-                )
+                    entry.custom_properties = {}  # type: ignore[misc]
+                entry.custom_properties[original_attr] = value  # pyright: ignore[reportAttributeAccessIssue]
         except Exception as e:
             raise KeePassError(
                 f"Failed to set custom attribute '{original_attr}' on '{title}'",
@@ -414,9 +393,7 @@ class KeePassManager:
 
         if not self.kp:
             raise KeePassError("Database not connected. Call connect() first.")
-        parent_group = (
-            group if group is not None else self.kp.root_group
-        )  # pyright: ignore[reportAttributeAccessIssue]
+        parent_group = group if group is not None else self.kp.root_group  # pyright: ignore[reportAttributeAccessIssue]
         entry = self.kp.add_entry(
             parent_group,
             title=validated_title,
@@ -434,9 +411,9 @@ class KeePassManager:
     def update_entry(
         self,
         entry,
-        username: Optional[str] = None,
-        url: Optional[str] = None,
-        notes: Optional[str] = None,
+        username: str | None = None,
+        url: str | None = None,
+        notes: str | None = None,
     ) -> None:
         """
         Update an existing entry in the KeePass database.

@@ -12,23 +12,22 @@ import sys
 from keeenv.config import KeeenvConfig
 from keeenv.constants import (
     CONFIG_FILENAME,
-    KEEPASS_SECTION,
     ENV_SECTION,
+    KEEPASS_SECTION,
 )
 from keeenv.exceptions import (
     ConfigError,
     ConfigFileNotFoundError,
     KeePassError,
-    ValidationError,
     SecurityError,
+    ValidationError,
 )
 from keeenv.keepass import KeePassManager
 from keeenv.validation import (
-    EntryValidator,
     AttributeValidator,
+    EntryValidator,
     PathValidator,
 )
-from typing import Optional
 
 
 def _handle_error(error) -> None:
@@ -221,8 +220,8 @@ def _prompt_secret(prompt: str) -> str:
 
 def _init_config_interactive(
     target_path: str,
-    kdbx: Optional[str],
-    keyfile: Optional[str],
+    kdbx: str | None,
+    keyfile: str | None,
     force: bool,
     yes: bool = False,
     no_password: bool = False,
@@ -342,7 +341,9 @@ def _init_config_interactive(
         if yes:
             if no_password:
                 if not keyfile:
-                    raise ConfigError("--no-password requires --keyfile to be provided.")
+                    raise ConfigError(
+                        "--no-password requires --keyfile to be provided."
+                    )
                 try:
                     from pykeepass import create_database
 
@@ -454,12 +455,12 @@ def _cmd_add(
     *,
     config_path: str,
     env_var: str,
-    secret: Optional[str],
-    title: Optional[str],
-    username: Optional[str],
-    url: Optional[str],
-    notes: Optional[str],
-    attribute: Optional[str],
+    secret: str | None,
+    title: str | None,
+    username: str | None,
+    url: str | None,
+    notes: str | None,
+    attribute: str | None,
     force: bool = False,
 ) -> None:
     """
@@ -611,7 +612,7 @@ def _cmd_list(*, config_path: str) -> None:
 
         if env_vars:
             # Print each environment variable name on a separate line
-            for var_name in env_vars.keys():
+            for var_name in env_vars:
                 print(var_name)
             logger.info(
                 "Listed %d environment variable(s) from %s",

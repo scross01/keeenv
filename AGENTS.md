@@ -7,8 +7,9 @@
 uv sync
 
 # Lint & format
-flake8 keeenv tests      # .flake8 sets max-line-length=88 (matching black)
-black keeenv tests       # configured in pyproject.toml
+ruff check keeenv tests        # lint
+ruff format keeenv tests       # format (replaces black)
+ruff check --fix keeenv tests  # lint + auto-fix
 
 # Test
 pytest tests/                          # all tests
@@ -32,7 +33,7 @@ No CI/workflows are configured — these commands are the sole quality gate.
 
 - Backend: `hatchling`
 - Version: single source of truth in `keeenv/__init__.py` (`__version__ = "0.4.0"`)
-- Dependencies: `pykeepass>=4.1.1.post1` (runtime), `pytest`, `flake8`, `black` (dev)
+- Dependencies: `pykeepass>=4.1.1.post1` (runtime), `pytest`, `ruff` (dev)
 - Entry point: `keeenv = "keeenv.main:main"` — the CLI runs from `main.py`, not `core.py`
 
 ## Logging

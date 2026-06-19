@@ -1,5 +1,5 @@
-import sys
 import subprocess
+import sys
 import textwrap
 from pathlib import Path
 
@@ -364,10 +364,7 @@ def test_add_existing_mapping_prompts_without_force(tmp_path: Path):
     cfg_path = tmp_path / ".keeenv"
     # Pre-populate .keeenv mapping to trigger mapping overwrite prompt
     cfg_path.write_text(
-        f"[keepass]\n"
-        f"database = {kdbx}\n\n"
-        "[env]\n"
-        'EXISTING = ${"Title".Password}\n',
+        f'[keepass]\ndatabase = {kdbx}\n\n[env]\nEXISTING = ${{"Title".Password}}\n',
         encoding="utf-8",
     )
     # Provide stdin only for master password; then default N on overwrite prompt
@@ -391,7 +388,7 @@ def test_add_with_all_options_builds_placeholder_format(tmp_path: Path):
     # Validate placeholder formatting path without touching DB by pointing to missing DB to fail early after parse.
     cfg_path = tmp_path / ".keeenv"
     cfg_path.write_text(
-        "[keepass]\n" "database = ./missing-db.kdbx\n\n" "[env]\n",
+        "[keepass]\ndatabase = ./missing-db.kdbx\n\n[env]\n",
         encoding="utf-8",
     )
     # Provide secret inline; choose custom attribute with space and a different title
@@ -446,7 +443,7 @@ def test_add_inline_secret_default_title_is_env_var(tmp_path: Path):
 
     cfg_path = tmp_path / ".keeenv"
     cfg_path.write_text(
-        "[keepass]\n" "database = ./missing-db.kdbx\n\n" "[env]\n",
+        "[keepass]\ndatabase = ./missing-db.kdbx\n\n[env]\n",
         encoding="utf-8",
     )
     proc = run_cli(
@@ -742,7 +739,7 @@ def test_eval_preserves_variable_case(tmp_path: Path):
             f"""
             [keepass]
             database = {kdbx}
-            
+
             [env]
             MixedCase_VAR = ${{"Entry".password}}
             ALL_CAPS = ${{"Entry".password}}
@@ -760,16 +757,16 @@ def test_eval_preserves_variable_case(tmp_path: Path):
     # Instead, let's use the list command which doesn't need database connection
     # and verify that the config preserves case
     proc = run_cli(["--config", str(cfg_path), "list"])
-    
+
     # Should succeed and preserve case
     assert proc.returncode == 0
     output = proc.stdout.strip().split("\n")
-    
+
     # Check that the original case is preserved
     assert "MixedCase_VAR" in output
     assert "ALL_CAPS" in output
     assert "snake_case" in output
-    
+
     # Ensure they are NOT converted to uppercase
     assert "MIXEDCASE_VAR" not in output
     assert "SNAKE_CASE" not in output
@@ -787,7 +784,7 @@ def test_eval_with_terraform_prefix_case_sensitivity(tmp_path: Path):
             f"""
             [keepass]
             database = {kdbx}
-            
+
             [env]
             TF_VAR_project_id = ${{"Entry".password}}
             TF_VAR_api_token = ${{"Entry".password}}
@@ -803,12 +800,12 @@ def test_eval_with_terraform_prefix_case_sensitivity(tmp_path: Path):
     # Should succeed and preserve case
     assert proc.returncode == 0
     output = proc.stdout.strip().split("\n")
-    
+
     # Check that TF_VAR prefixed variables maintain their exact case
     assert "TF_VAR_project_id" in output
     assert "TF_VAR_api_token" in output
     assert "tf_var_service_account" in output
-    
+
     # Ensure they are not converted to uppercase
     assert "TF_VAR_PROJECT_ID" not in output
     assert "TF_VAR_API_TOKEN" not in output
@@ -827,7 +824,7 @@ def test_run_preserves_variable_case(tmp_path: Path):
             """
             [keepass]
             database = ./test.kdbx
-            
+
             [env]
             TF_VAR_api_key = ${"Entry".password}
             mixedCaseVar = ${"Entry".password}
@@ -861,10 +858,7 @@ def test_run_preserves_variable_case(tmp_path: Path):
     )
     test_script.chmod(0o755)
 
-    proc = run_cli(
-        ["--config", str(cfg_path), "run", str(test_script)],
-        cwd=tmp_path
-    )
+    proc = run_cli(["--config", str(cfg_path), "run", str(test_script)], cwd=tmp_path)
 
     # Should fail due to invalid database, but we can check the error output
     # The important thing is that the code preserves case
