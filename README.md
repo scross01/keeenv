@@ -82,7 +82,7 @@ eval "$(keeenv eval)"
 
 # Export with custom config and strict mode
 eval "$(keeenv --config ./config/.keeenv --strict eval)"
-`
+```
 
 `run`: Execute a command with environment variables set from KeePass database.
 
@@ -112,7 +112,7 @@ keeenv --config ./config/.keeenv run my-command --arg1 --arg2
 
 # Run a command with environment variables and verbose logging
 keeenv --verbose run curl -H "Authorization: Bearer $API_KEY" https://api.example.com
-`
+```
 
 `list`: List environment variable names from `.keeenv`.
 
