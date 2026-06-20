@@ -18,3 +18,7 @@ uv.lock
 .coverage
 
 .poolside
+
+Makefile
+
+plans/

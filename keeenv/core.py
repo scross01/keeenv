@@ -211,7 +211,14 @@ def _prompt_input(prompt: str) -> str:
 
 
 def _prompt_secret(prompt: str) -> str:
-    """Prompt user for a secret value without echoing (uses getpass)."""
+    """Prompt user for a secret value without echoing (uses getpass).
+
+    Returns empty string if stdin is not a TTY (non-interactive context).
+    """
+    import os
+
+    if not os.isatty(0):
+        return ""
     try:
         return getpass.getpass(prompt)
     except EOFError:
@@ -374,8 +381,12 @@ def _init_config_interactive(
                     )
                 _create_kdbx_database(kdbx_path, keyfile=keyfile)
             else:
-                pw1 = _prompt_secret("Create master password: ").strip()
-                pw2 = _prompt_secret("Confirm master password: ").strip()
+                env_pw = os.environ.get("KEEENV_PASSWORD")
+                if env_pw is not None:
+                    pw1 = pw2 = env_pw
+                else:
+                    pw1 = _prompt_secret("Create master password: ").strip()
+                    pw2 = _prompt_secret("Confirm master password: ").strip()
                 if not pw1:
                     raise ConfigError("Master password cannot be empty.")
                 if pw1 != pw2:
@@ -397,8 +408,12 @@ def _init_config_interactive(
                         )
                     _create_kdbx_database(kdbx_path, keyfile=keyfile)
                 else:
-                    pw1 = _prompt_secret("Create master password: ").strip()
-                    pw2 = _prompt_secret("Confirm master password: ").strip()
+                    env_pw = os.environ.get("KEEENV_PASSWORD")
+                    if env_pw is not None:
+                        pw1 = pw2 = env_pw
+                    else:
+                        pw1 = _prompt_secret("Create master password: ").strip()
+                        pw2 = _prompt_secret("Confirm master password: ").strip()
                     if not pw1:
                         raise ConfigError("Master password cannot be empty.")
                     if pw1 != pw2:

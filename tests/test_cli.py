@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 import textwrap
@@ -5,14 +6,21 @@ from pathlib import Path
 
 
 def run_cli(
-    args: list[str], cwd: Path | None = None, input_text: str | None = None
+    args: list[str],
+    cwd: Path | None = None,
+    input_text: str | None = None,
+    env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess:
     """
     Helper to run the keeenv CLI in tests.
 
     Prefer running the module to avoid PATH issues in CI. Falls back to console script if needed.
     Supports passing stdin via input_text for interactive commands.
+    Supports passing extra environment variables via env.
     """
+    run_env = os.environ.copy()
+    if env:
+        run_env.update(env)
     module_cmd = [sys.executable, "-m", "keeenv.main"]
     try:
         return subprocess.run(
@@ -21,6 +29,7 @@ def run_cli(
             capture_output=True,
             text=True,
             input=input_text if input_text is not None else None,
+            env=run_env,
             check=False,
         )
     except Exception:
@@ -31,6 +40,7 @@ def run_cli(
             capture_output=True,
             text=True,
             input=input_text if input_text is not None else None,
+            env=run_env,
             check=False,
         )
 

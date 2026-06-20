@@ -95,6 +95,9 @@ class KeePassManager:
         Try to connect without password. If credentials are required,
         prompt the user for a master password and retry.
 
+        If the KEEENV_PASSWORD environment variable is set, it is used
+        instead of prompting (useful for CI and non-interactive contexts).
+
         Raises:
             KeePassCredentialsError: If connection fails even with prompted password
             KeePassError: If database operations fail
@@ -105,6 +108,10 @@ class KeePassManager:
         try:
             self.connect(password=None)
         except KeePassCredentialsError:
+            env_password = os.environ.get("KEEENV_PASSWORD")
+            if env_password is not None:
+                self.connect(password=env_password)
+                return
             try:
                 password = getpass.getpass(
                     f"Enter master password for {os.path.basename(self.db_path)}: "

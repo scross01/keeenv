@@ -213,6 +213,16 @@ The `[keepass]` section configures the Keepass database to use:
 
 Keeenv will prompt for a master password if the database requires one. You can use a password, a keyfile, or both to secure your database.
 
+#### Non-interactive usage
+
+Set the `KEEENV_PASSWORD` environment variable to skip the interactive password prompt. This works for both connecting to an existing database and creating a new one. Useful for CI/CD pipelines, Docker containers, and scripted workflows:
+
+```shell
+KEEENV_PASSWORD="my-master-password" eval "$(keeenv eval)"
+KEEENV_PASSWORD="my-master-password" keeenv run my-command
+KEEENV_PASSWORD="my-master-password" keeenv init --kdbx ./secrets.kdbx -y
+```
+
 The `[env]` section sets the environment variables using `${}` to enclose substitutions from Keepass in the format of `"Entry Title".Attribute`, e.g. `"My Account".Password`.
 
 Standard attributes include:
