@@ -647,66 +647,53 @@ def _cmd_run(*, config_path: str, command: list[str]) -> None:
     """
     logger = logging.getLogger(__name__)
 
+    # Load and validate configuration
+    config_manager = KeeenvConfig(config_path)
+    config = config_manager.get_config()
+
+    # Validate Keepass configuration and get paths
+    validated_db_path, validated_keyfile_path = (
+        config_manager.validate_keepass_config(config)
+    )
+
+    # Use KeePassManager for database operations
+    kp_manager = KeePassManager(validated_db_path, validated_keyfile_path)
+    kp_manager.connect_with_password_fallback()
+
     try:
-        # Load and validate configuration
-        config_manager = KeeenvConfig(config_path)
-        config = config_manager.get_config()
+        # Process environment variables using KeePassManager
+        env_vars = {}
+        if ENV_SECTION in config:
+            env_config = config[ENV_SECTION]
+            for var_name, value_template in env_config.items():
+                # Use strict mode for run command to ensure all placeholders are resolved
+                final_value = kp_manager.substitute_placeholders(
+                    value_template, strict=True
+                )
+                env_vars[var_name] = final_value
 
-        # Validate Keepass configuration and get paths
-        validated_db_path, validated_keyfile_path = (
-            config_manager.validate_keepass_config(config)
-        )
+        # Execute the command with the environment variables
+        logger.info("Executing command: %s", " ".join(command))
+        logger.info("Environment variables: %s", env_vars)
 
-        # Use KeePassManager for database operations
-        kp_manager = KeePassManager(validated_db_path, validated_keyfile_path)
-        kp_manager.connect_with_password_fallback()
+        # Create a copy of the current environment and add our variables
+        full_env = os.environ.copy()
+        full_env.update(env_vars)
 
-        try:
-            # Process environment variables using KeePassManager
-            env_vars = {}
-            if ENV_SECTION in config:
-                env_config = config[ENV_SECTION]
-                for var_name, value_template in env_config.items():
-                    # Use strict mode for run command to ensure all placeholders are resolved
-                    final_value = kp_manager.substitute_placeholders(
-                        value_template, strict=True
-                    )
-                    env_vars[var_name] = final_value
+        # Execute the command (list form, no shell for security)
+        # If the user quoted the entire command (e.g., keeenv run "echo hello"),
+        # argparse gives a single string. Split it with shlex so subprocess
+        # can find the executable.
+        if len(command) == 1:
+            command = shlex.split(command[0])
+        result = subprocess.run(command, env=full_env, shell=False)
 
-            # Execute the command with the environment variables
-            logger.info("Executing command: %s", " ".join(command))
-            logger.info("Environment variables: %s", env_vars)
+        # Forward the exit code
+        sys.exit(result.returncode)
 
-            # Create a copy of the current environment and add our variables
-            full_env = os.environ.copy()
-            full_env.update(env_vars)
-
-            # Execute the command (list form, no shell for security)
-            # If the user quoted the entire command (e.g., keeenv run "echo hello"),
-            # argparse gives a single string. Split it with shlex so subprocess
-            # can find the executable.
-            if len(command) == 1:
-                command = shlex.split(command[0])
-            result = subprocess.run(command, env=full_env, shell=False)
-
-            # Forward the exit code
-            sys.exit(result.returncode)
-
-        finally:
-            # Ensure database connection is closed
-            kp_manager.disconnect()
-
-    except ConfigError as e:
-        _handle_error(e)
-    except KeePassError as e:
-        _handle_error(e)
-    except ValidationError as e:
-        _handle_error(e)
-    except SecurityError as e:
-        _handle_error(e)
-    except Exception as e:
-        logger.error("Unexpected error executing command: %s", e)
-        sys.exit(1)
+    finally:
+        # Ensure database connection is closed
+        kp_manager.disconnect()
 
 
 def main() -> None:
