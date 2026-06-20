@@ -253,6 +253,37 @@ def _create_kdbx_database(
         raise KeePassError("Failed to create KeePass database", e)
 
 
+def _create_kdbx_with_password_interactive(
+    kdbx_path: str,
+    no_password: bool = False,
+    keyfile: str | None = None,
+) -> None:
+    """Create a new KeePass database, interactively or via env var.
+
+    If ``no_password`` is True, ``keyfile`` must be provided and the database
+    is created without a master password. Otherwise, the master password is
+    taken from ``KEEENV_PASSWORD`` (if set) or read from the terminal (twice
+    for confirmation).
+    """
+    if no_password:
+        if not keyfile:
+            raise ConfigError("--no-password requires --keyfile to be provided.")
+        _create_kdbx_database(kdbx_path, keyfile=keyfile)
+        return
+
+    env_pw = os.environ.get("KEEENV_PASSWORD")
+    if env_pw is not None:
+        pw1 = pw2 = env_pw
+    else:
+        pw1 = _prompt_secret("Create master password: ").strip()
+        pw2 = _prompt_secret("Confirm master password: ").strip()
+    if not pw1:
+        raise ConfigError("Master password cannot be empty.")
+    if pw1 != pw2:
+        raise ConfigError("Passwords do not match.")
+    _create_kdbx_database(kdbx_path, password=pw1)
+
+
 def _init_config_interactive(
     target_path: str,
     kdbx: str | None,
@@ -274,7 +305,6 @@ def _init_config_interactive(
     logger = logging.getLogger(__name__)
     target = os.path.expanduser(target_path)
 
-    # Validate --no-password requires --keyfile
     if no_password and not keyfile:
         raise ConfigError("--no-password requires --keyfile to be provided.")
 
@@ -374,24 +404,9 @@ def _init_config_interactive(
     if not path_exists:
         # -y/--yes: confirm creating a new kdbx without prompting
         if yes:
-            if no_password:
-                if not keyfile:
-                    raise ConfigError(
-                        "--no-password requires --keyfile to be provided."
-                    )
-                _create_kdbx_database(kdbx_path, keyfile=keyfile)
-            else:
-                env_pw = os.environ.get("KEEENV_PASSWORD")
-                if env_pw is not None:
-                    pw1 = pw2 = env_pw
-                else:
-                    pw1 = _prompt_secret("Create master password: ").strip()
-                    pw2 = _prompt_secret("Confirm master password: ").strip()
-                if not pw1:
-                    raise ConfigError("Master password cannot be empty.")
-                if pw1 != pw2:
-                    raise ConfigError("Passwords do not match.")
-                _create_kdbx_database(kdbx_path, password=pw1)
+            _create_kdbx_with_password_interactive(
+                kdbx_path, no_password=no_password, keyfile=keyfile
+            )
         else:
             choice = (
                 _prompt_input(
@@ -401,24 +416,9 @@ def _init_config_interactive(
                 .lower()
             )
             if choice in ("y", "yes"):
-                if no_password:
-                    if not keyfile:
-                        raise ConfigError(
-                            "--no-password requires --keyfile to be provided."
-                        )
-                    _create_kdbx_database(kdbx_path, keyfile=keyfile)
-                else:
-                    env_pw = os.environ.get("KEEENV_PASSWORD")
-                    if env_pw is not None:
-                        pw1 = pw2 = env_pw
-                    else:
-                        pw1 = _prompt_secret("Create master password: ").strip()
-                        pw2 = _prompt_secret("Confirm master password: ").strip()
-                    if not pw1:
-                        raise ConfigError("Master password cannot be empty.")
-                    if pw1 != pw2:
-                        raise ConfigError("Passwords do not match.")
-                    _create_kdbx_database(kdbx_path, password=pw1)
+                _create_kdbx_with_password_interactive(
+                    kdbx_path, no_password=no_password, keyfile=keyfile
+                )
             else:
                 raise ConfigError(f"Database '{kdbx_path}' not found. Aborting.")
     elif yes and not force:
