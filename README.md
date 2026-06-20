@@ -223,6 +223,13 @@ KEEENV_PASSWORD="my-master-password" keeenv run my-command
 KEEENV_PASSWORD="my-master-password" keeenv init --kdbx ./secrets.kdbx -y
 ```
 
+**Security considerations:** Passing the master password via `KEEENV_PASSWORD` is convenient but carries real exposure risk. On a running system, any process owned by the same user can read environment variables (for example, via `/proc/<pid>/environ` or `ps eww`). In CI systems, environment variables are often recorded in build logs or exposed in the build metadata UI. Container runtimes, orchestrators, and VM introspection tools may also expose environment variables to other workloads on the same host.
+
+Prefer one or more of the following higher-security patterns when possible:
+
+- Use a **keyfile-only** database (`--no-password` init) with a securely provisioned keyfile. The keyfile does not travel through environment variables.
+- Avoid setting `KEEENV_PASSWORD` in a shared shell profile; export it only for the exact command that needs it, or use a secret injected at runtime by your orchestrator.
+
 The `[env]` section sets the environment variables using `${}` to enclose substitutions from Keepass in the format of `"Entry Title".Attribute`, e.g. `"My Account".Password`.
 
 Standard attributes include:

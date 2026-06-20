@@ -45,7 +45,6 @@ class TestInit:
         """Test KeePassManager initialization."""
         assert manager.db_path == "/tmp/test.kdbx"
         assert manager.keyfile_path == "/tmp/test.key"
-        assert manager.password == ""
         assert manager.kp is None
         assert manager._is_connected is False
 
@@ -65,7 +64,6 @@ class TestConnect:
         )
         mgr.connect("test_password")
         assert mgr._is_connected is True
-        assert mgr.password == "test_password"
         mock_pykeepass_class.assert_called_once_with(
             "/tmp/test.kdbx",
             password="test_password",
@@ -149,7 +147,6 @@ class TestDisconnect:
         manager._is_connected = True
         manager.disconnect()
         assert manager._is_connected is False
-        assert manager.password == ""
         assert manager.kp is None
 
 

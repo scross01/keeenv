@@ -652,8 +652,8 @@ def _cmd_run(*, config_path: str, command: list[str]) -> None:
     config = config_manager.get_config()
 
     # Validate Keepass configuration and get paths
-    validated_db_path, validated_keyfile_path = (
-        config_manager.validate_keepass_config(config)
+    validated_db_path, validated_keyfile_path = config_manager.validate_keepass_config(
+        config
     )
 
     # Use KeePassManager for database operations
@@ -674,7 +674,7 @@ def _cmd_run(*, config_path: str, command: list[str]) -> None:
 
         # Execute the command with the environment variables
         logger.info("Executing command: %s", " ".join(command))
-        logger.info("Environment variables: %s", env_vars)
+        # Do not log resolved env vars; values may contain secrets.
 
         # Create a copy of the current environment and add our variables
         full_env = os.environ.copy()

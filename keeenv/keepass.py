@@ -50,7 +50,6 @@ class KeePassManager:
         """
         self.db_path = db_path
         self.keyfile_path = keyfile_path
-        self.password = ""
         self.kp = None
         self._is_connected = False
         self._pykeepass_class = pykeepass_class or PyKeePass
@@ -72,7 +71,6 @@ class KeePassManager:
             self.kp = self._pykeepass_class(
                 self.db_path, password=password, keyfile=self.keyfile_path
             )
-            self.password = password or ""
             self._is_connected = True
         except CredentialsError:
             raise KeePassCredentialsError(ERROR_INVALID_PASSWORD_OR_KEYFILE)
@@ -83,7 +81,6 @@ class KeePassManager:
         """Close database connection and clean up resources."""
         if self.kp:
             self.kp = None
-        self.password = ""
         self._is_connected = False
 
     def is_connected(self) -> bool:

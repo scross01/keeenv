@@ -2,6 +2,7 @@
 
 ## v0.6.0
 
+- Added `KEEENV_PASSWORD` environment variable support for non-interactive authentication in CI/CD pipelines, Docker containers, and scripted workflows.
 - Added `--no-password` option to `init` command to create .kdbx file with keyfile only.
 - Added `-y` option to `init` command to auto-accept creation of new .kdbx file.
 
