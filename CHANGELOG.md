@@ -1,6 +1,6 @@
 # Change Log
 
-## Unreleased
+## v0.7.0
 
 - Global options such as `--strict`, `--config`, `--quiet` and `--verbose` are now accepted after the subcommand too, so `keeenv eval --strict` works.
 - Entry titles containing a double quote are rejected with a clear error instead of producing a mapping that can never be resolved.
@@ -13,6 +13,9 @@
 - Entry titles and values containing `%` are now stored and read literally instead of raising an interpolation error.
 - `eval` no longer fails the whole export when a single placeholder cannot be resolved; unresolvable variables are exported empty with a warning unless `--strict` is set. Genuine database failures still abort.
 - `eval` and `list` now reject invalid environment variable names instead of emitting them into shell output, preventing command injection when the output is evaluated.
+- `run` and `add` now reject invalid environment variable names too, with a clear error instead of a traceback.
+- `add` and `init` no longer mistake a literal `run` used as an option value (e.g. `add KEY secret -t run`) for the `run` subcommand, which silently dropped later flags such as `--force`.
+- `init` now stores the database and keyfile paths as absolute paths, so a config written from one directory resolves correctly from another.
 - Fixed `run` command to fail cleanly with a clear error when the requested command is not found, instead of printing a traceback.
 
 ## v0.6.0

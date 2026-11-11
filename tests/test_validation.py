@@ -61,7 +61,8 @@ class TestPathValidator:
         with pytest.raises(ValidationError, match=r"File not found:"):
             PathValidator.validate_file_path("/nonexistent/../nope/file.txt")
 
-        # Tilde expands to home; with must_exist=True the validator raises File not found
+    def test_validate_file_path_tilde_expands_and_must_exist(self):
+        """Tilde expands to home; a missing target reports File not found."""
         with pytest.raises(ValidationError, match=r"File not found:"):
             PathValidator.validate_file_path("~/malicious")
 

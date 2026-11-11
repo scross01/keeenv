@@ -142,18 +142,18 @@ def _create_argument_parser() -> argparse.ArgumentParser:
         help="List environment variable names from .keeenv",
         description="List all environment variable names defined in the [env] section of .keeenv",
     )
-    _add_global_flags(list_parser)
+    _add_global_flags(list_parser, include_strict=False)
 
-    # run subcommand
-    run_parser = subparsers.add_parser(
+    # run subcommand. It deliberately declares no positional: everything after
+    # the `run` token is sliced off by _split_run_argv before argparse sees it,
+    # so a `command` argument here would always be empty. See main().
+    subparsers.add_parser(
         "run",
         help="Run a command with environment variables set from .keeenv",
-        description="Execute a command with environment variables populated from KeePass database",
-    )
-    run_parser.add_argument(
-        "command",
-        nargs="*",
-        help="Command and arguments to execute (everything after 'run' is passed through)",
+        description=(
+            "Execute a command with environment variables populated from KeePass "
+            "database. Everything after 'run' is passed to the child verbatim."
+        ),
     )
 
     # init subcommand
@@ -360,6 +360,18 @@ def _init_config_interactive(
     if parent_dir and not os.path.isdir(parent_dir):
         os.makedirs(parent_dir, exist_ok=True)
 
+    def _store_keepass_path(raw_path: str) -> str:
+        """
+        Convert a user-supplied DB/keyfile path into the form written to config.
+
+        Paths are entered and validated relative to the process CWD, but are
+        read back relative to the config file's directory (see
+        ``KeeenvConfig._resolve_keepass_path``). Storing the absolute path makes
+        both interpretations agree, so a config written from one directory works
+        from any other.
+        """
+        return os.path.abspath(os.path.expanduser(raw_path))
+
     # Handle existing config
     if os.path.exists(target):
         if not force:
@@ -383,8 +395,16 @@ def _init_config_interactive(
                 if KEEPASS_SECTION not in cfg:
                     cfg[KEEPASS_SECTION] = {}
                 # Determine values (prefer provided args; fall back to existing; then prompt)
-                current_db = cfg[KEEPASS_SECTION].get("database")
-                current_key = cfg[KEEPASS_SECTION].get("keyfile")
+                # Existing values are resolved relative to the config file, matching
+                # how they are interpreted on read.
+                raw_db = cfg[KEEPASS_SECTION].get("database")
+                raw_key = cfg[KEEPASS_SECTION].get("keyfile")
+                current_db = (
+                    config_manager._resolve_keepass_path(raw_db) if raw_db else None
+                )
+                current_key = (
+                    config_manager._resolve_keepass_path(raw_key) if raw_key else None
+                )
                 if not kdbx:
                     kdbx = (
                         _prompt_input(
@@ -415,9 +435,9 @@ def _init_config_interactive(
                     except ValidationError:
                         raise ConfigError(f"Keyfile '{key_path}' not found. Aborting.")
                 # Update and write back
-                cfg[KEEPASS_SECTION]["database"] = kdbx_path
+                cfg[KEEPASS_SECTION]["database"] = _store_keepass_path(kdbx)
                 if keyfile:
-                    cfg[KEEPASS_SECTION]["keyfile"] = os.path.expanduser(keyfile)
+                    cfg[KEEPASS_SECTION]["keyfile"] = _store_keepass_path(keyfile)
                 elif "keyfile" in cfg[KEEPASS_SECTION]:
                     # Remove keyfile if cleared
                     cfg[KEEPASS_SECTION].pop("keyfile", None)
@@ -493,9 +513,9 @@ def _init_config_interactive(
     # Compose config (preserve key case for ENV var names)
     config_manager = KeeenvConfig(target)
     cfg = config_manager._make_case_preserving_config()
-    cfg[KEEPASS_SECTION] = {"database": kdbx_path}
+    cfg[KEEPASS_SECTION] = {"database": _store_keepass_path(kdbx_path)}
     if keyfile:
-        cfg[KEEPASS_SECTION]["keyfile"] = os.path.expanduser(keyfile)
+        cfg[KEEPASS_SECTION]["keyfile"] = _store_keepass_path(keyfile)
     # Include empty [env] section when creating a new file
     cfg[ENV_SECTION] = {}
 
@@ -531,6 +551,10 @@ def _cmd_add(
     - Updates .keeenv [env] with ENV_VAR = ${"Title".Attribute} (quotes if needed).
     """
     logger = logging.getLogger(__name__)
+
+    # Names are written into `.keeenv` and later rendered into shell `export`
+    # lines, so reject invalid shell identifiers before any durable write.
+    env_var = EnvVarValidator.validate_env_var_name(env_var)
 
     # Load/validate config
     config_manager = KeeenvConfig(config_path)
@@ -591,6 +615,7 @@ def _cmd_add(
     kp_manager.connect_with_password_fallback()
 
     created_entry = False
+    created_uuid = None
     created_title = eff_title
     try:
         # Find or create the entry using KeePassManager
@@ -618,6 +643,7 @@ def _cmd_add(
                 group=group_for_entry,
             )
             created_entry = True
+            created_uuid = entry.uuid
             created_title = final_title
         else:
             # update username if requested
@@ -647,13 +673,19 @@ def _cmd_add(
         config_manager.save_config(cfg)
     except Exception:
         if created_entry:
-            # Best-effort cleanup of the entry this run created. An entry we
-            # only updated cannot be restored here; KeePass clients keep their
-            # own file version history for that case.
+            # Delete exactly the entry this run created, identified by UUID:
+            # titles are not unique across groups, so a title lookup could
+            # match (and destroy) an unrelated entry. An entry we only updated
+            # cannot be restored here; KeePass clients keep their own file
+            # version history for that case.
             rollback = KeePassManager(db_path, keyfile_path)
             try:
                 rollback.connect_with_password_fallback()
-                found, _, _ = rollback.find_entry(created_title)
+                found = (
+                    rollback.find_entry_by_uuid(created_uuid)
+                    if created_uuid is not None
+                    else None
+                )
                 if found is not None:
                     rollback.delete_entry(found)
                     rollback.save_database()
@@ -732,6 +764,17 @@ def _cmd_run(*, config_path: str, command: list[str]) -> None:
     config_manager = KeeenvConfig(config_path)
     config = config_manager.get_config()
 
+    # Validate environment variable names before touching the database. Names
+    # are handed straight to subprocess.run(env=...), which rejects invalid
+    # ones with a bare ValueError; validating up front gives a clean domain
+    # error (and skips the password prompt), consistent with eval/list.
+    env_items = []
+    if ENV_SECTION in config:
+        for var_name, value_template in config[ENV_SECTION].items():
+            env_items.append(
+                (EnvVarValidator.validate_env_var_name(var_name), value_template)
+            )
+
     # Validate Keepass configuration and get paths
     validated_db_path, validated_keyfile_path = config_manager.validate_keepass_config(
         config
@@ -744,14 +787,12 @@ def _cmd_run(*, config_path: str, command: list[str]) -> None:
     try:
         # Process environment variables using KeePassManager
         env_vars = {}
-        if ENV_SECTION in config:
-            env_config = config[ENV_SECTION]
-            for var_name, value_template in env_config.items():
-                # Use strict mode for run command to ensure all placeholders are resolved
-                final_value = kp_manager.substitute_placeholders(
-                    value_template, strict=True
-                )
-                env_vars[var_name] = final_value
+        for validated_name, value_template in env_items:
+            # Use strict mode for run command to ensure all placeholders are resolved
+            final_value = kp_manager.substitute_placeholders(
+                value_template, strict=True
+            )
+            env_vars[validated_name] = final_value
 
         # Execute the command with the environment variables
         logger.info("Executing command: %s", " ".join(command))
@@ -766,10 +807,12 @@ def _cmd_run(*, config_path: str, command: list[str]) -> None:
 
         # Execute the command (list form, no shell for security)
         # If the user quoted the entire command (e.g., keeenv run "echo hello"),
-        # argparse gives a single string. Split it with shlex so subprocess
+        # the child argv is a single string. Split it with shlex so subprocess
         # can find the executable.
         if len(command) == 1:
             command = shlex.split(command[0])
+        if not command:
+            raise ValidationError("No command specified after 'run'")
         try:
             result = subprocess.run(command, env=full_env, shell=False)
         except FileNotFoundError:
@@ -783,29 +826,61 @@ def _cmd_run(*, config_path: str, command: list[str]) -> None:
         kp_manager.disconnect()
 
 
+# Options that consume the following token as their value. Used by
+# _split_run_argv to tell a real subcommand token apart from an option value
+# that happens to spell "run" (e.g. `add KEY secret -t run`).
+_VALUE_OPTIONS = frozenset(
+    {
+        "--config",
+        "--kdbx",
+        "--keyfile",
+        "--title",
+        "--user",
+        "--url",
+        "--notes",
+        "--attribute",
+        "-t",
+        "-u",
+        "-a",
+    }
+)
+
+
+def _first_positional_index(argv: list[str]) -> int:
+    """Return the index of the first positional token, skipping options/values."""
+    i = 0
+    n = len(argv)
+    while i < n:
+        token = argv[i]
+        if token == "--":
+            # Everything after `--` is positional; the subcommand is next.
+            return i + 1
+        if token.startswith("-") and token != "-":
+            # `--opt=value` carries its value inline; a bare value option
+            # consumes the next token; a flag consumes nothing.
+            i += 1 if "=" in token or token not in _VALUE_OPTIONS else 2
+            continue
+        return i
+    return n
+
+
 def _split_run_argv(argv: list[str]) -> tuple[list[str], list[str] | None]:
     """
     Split argv into (arguments for argparse, child command or None).
 
-    Everything after the first ``run`` subcommand token belongs to the child
-    process, verbatim — including tokens that look like keeenv's own options
+    Everything after the ``run`` subcommand token belongs to the child process,
+    verbatim — including tokens that look like keeenv's own options
     (``--strict``, ``-n``, a literal ``--``). argparse's REMAINDER does not do
     this: it still claims tokens matching a known option.
 
-    ``--config`` takes a value, so a config path literally named ``run`` must
-    not be mistaken for the subcommand; the following token is skipped.
+    Only the *subcommand position* (the first positional token) can be ``run``.
+    A literal ``run`` used as an option value (``-t run``, ``--kdbx run``) or as
+    a later positional is therefore never mistaken for the subcommand.
     """
 
-    skip_next = False
-    for i, token in enumerate(argv):
-        if skip_next:
-            skip_next = False
-            continue
-        if token == "--config":
-            skip_next = True
-            continue
-        if token == "run":
-            return argv[: i + 1], argv[i + 1 :]
+    index = _first_positional_index(argv)
+    if index < len(argv) and argv[index] == "run":
+        return argv[: index + 1], argv[index + 1 :]
     return argv, None
 
 

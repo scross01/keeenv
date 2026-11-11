@@ -441,3 +441,119 @@ def test_eval_preserves_custom_attribute_case(tmp_path, kdbx_db):
     result = run_cli(["eval"], cwd=tmp_path, env={"KEEENV_PASSWORD": "testpass"})
     assert result.returncode == 0, f"stdout: {result.stdout}\nstderr: {result.stderr}"
     assert "export MIXED=custom-value-123" in result.stdout
+
+
+def test_run_add_title_value_named_run_keeps_force(tmp_path):
+    """`-t run` is an option value, not the run subcommand: --force survives."""
+    from pykeepass import PyKeePass, create_database
+
+    db_path = tmp_path / "t.kdbx"
+    create_database(str(db_path), password="pw")
+    cfg_path = tmp_path / ".keeenv"
+    cfg_path.write_text(f"[keepass]\ndatabase = {db_path}\n\n[env]\n", encoding="utf-8")
+
+    result = run_cli(
+        ["--config", str(cfg_path), "add", "VAR", "v", "-t", "run"],
+        cwd=tmp_path,
+        env={"KEEENV_PASSWORD": "pw"},
+    )
+    assert result.returncode == 0, result.stderr
+
+    verify = PyKeePass(str(db_path), password="pw")
+    assert verify.find_entries(title="run", first=True) is not None
+    assert 'VAR = ${"run".password}' in cfg_path.read_text()
+
+
+def test_run_rejects_invalid_env_var_name(tmp_path):
+    """`run` must reject a malformed env var name before launching the child."""
+    cfg_path = tmp_path / ".keeenv"
+    cfg_path.write_text(
+        '[keepass]\ndatabase = ./missing.kdbx\n\n[env]\n"BAD;NAME" = ${"E".password}\n',
+        encoding="utf-8",
+    )
+    result = run_cli(
+        ["--config", str(cfg_path), "run", "echo", "should-not-run"],
+        cwd=tmp_path,
+    )
+    assert result.returncode == 1
+    assert "should-not-run" not in result.stdout
+    assert "Invalid environment variable" in result.stderr
+
+
+def test_run_empty_command_errors_cleanly(tmp_path, kdbx_config):
+    """A quoted empty command must fail with a clear error, not IndexError."""
+    result = run_cli(["run", ""], cwd=tmp_path, env={"KEEENV_PASSWORD": "testpass"})
+    assert result.returncode == 1
+    assert "No command specified" in result.stderr
+    assert "IndexError" not in result.stderr
+
+
+def test_init_stores_absolute_database_path(tmp_path):
+    """A relative --kdbx must be stored as an absolute path so any CWD resolves it."""
+    from pykeepass import create_database
+
+    create_database(str(tmp_path / "d.kdbx"), password="pw")
+    cfg_path = tmp_path / ".keeenv"
+
+    result = run_cli(
+        ["--config", str(cfg_path), "init", "--kdbx", "d.kdbx", "--force"],
+        cwd=tmp_path,
+    )
+    assert result.returncode == 0, result.stderr
+
+    content = cfg_path.read_text()
+    assert f"database = {tmp_path / 'd.kdbx'}" in content
+
+
+def test_add_config_write_failure_rolls_back_by_uuid(tmp_path, monkeypatch):
+    """Rollback deletes the entry this run created, not a same-titled one.
+
+    A title-only lookup can match an unrelated entry in another group and
+    delete it; the created entry is tracked by UUID to avoid that.
+    """
+    from pykeepass import PyKeePass, create_database
+
+    from keeenv import core
+
+    db_path = tmp_path / "dup.kdbx"
+    create_database(str(db_path), password="pw")
+    seed = PyKeePass(str(db_path), password="pw")
+    seed.add_entry(seed.root_group, title="Same", username="", password="keep-me")
+    group = seed.add_group(seed.root_group, "Group")
+    seed.add_entry(group, title="Other", username="", password="other")
+    seed.save()
+
+    cfg_path = tmp_path / ".keeenv"
+    cfg_path.write_text(f"[keepass]\ndatabase = {db_path}\n\n[env]\n", encoding="utf-8")
+
+    monkeypatch.setenv("KEEENV_PASSWORD", "pw")
+
+    def boom(self, cfg):
+        raise RuntimeError("disk full")
+
+    monkeypatch.setattr("keeenv.config.KeeenvConfig.save_config", boom)
+
+    with pytest.raises(RuntimeError, match="disk full"):
+        core._cmd_add(
+            config_path=str(cfg_path),
+            env_var="NEW",
+            secret="v",
+            title="Group/Same",
+            username=None,
+            url=None,
+            notes=None,
+            attribute=None,
+            force=False,
+        )
+
+    verify = PyKeePass(str(db_path), password="pw")
+    # Only the root "Same" survives, untouched; the created "Group/Same" is gone.
+    survivors = verify.find_entries(title="Same", first=False)
+    assert len(survivors) == 1
+    assert survivors[0].password == "keep-me"
+    assert (
+        verify.find_entries(
+            title="Same", group=verify.find_groups(name="Group", first=True), first=True
+        )
+        is None
+    )

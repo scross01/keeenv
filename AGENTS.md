@@ -59,7 +59,7 @@ Default level is **`WARNING`**. `--verbose` → `DEBUG`, `--quiet` → `ERROR`. 
 - **Secret input**: Supports stdin piping (`pbpaste | keeenv add ENV_VAR`), interactive prompt (via `getpass`), or inline argument.
 - **Custom attributes** (non-standard): must match `^[a-zA-Z_][a-zA-Z0-9_ ]*$`. Standard attributes (password, username, url, notes) are matched case-insensitively.
 - **Exit codes**: always `sys.exit(1)` on any error (known or unexpected). Success is 0.
-- **`run` argument handling**: `main()` slices argv at the `run` token (`_split_run_argv`) and passes the tail to the child verbatim. Do not add keeenv options to the `run` subparser — that would steal child arguments. Anything taking a value in the global parser must be taught to `_split_run_argv`.
+- **`run` argument handling**: `main()` calls `_split_run_argv`, which finds the first *positional* token (skipping option values from `_VALUE_OPTIONS`) and, if it is `run`, passes everything after it to the child verbatim. The `run` subparser therefore declares no positional. Do not add keeenv options to the `run` subparser — that would steal child arguments. **Any new value-taking option must be added to `_VALUE_OPTIONS`**, otherwise a literal `run` used as its value is mistaken for the subcommand and later flags are silently dropped.
 
 ## Version bumping
 Update `__version__` in `keeenv/__init__.py:10`. No other version strings exist.

@@ -197,6 +197,24 @@ class KeePassManager:
                 title,
             )  # pyright: ignore[reportAttributeAccessIssue]
 
+    def find_entry_by_uuid(self, uuid) -> "Entry | None":  # type: ignore[name-defined]
+        """
+        Find an entry by its UUID.
+
+        UUIDs are unique within a database, unlike titles (which can repeat
+        across groups), so this is the unambiguous handle for deleting an entry
+        created earlier in the same logical operation.
+
+        Args:
+            uuid: Entry UUID to look up
+
+        Returns:
+            The matching entry, or None if not found
+        """
+        if not self._is_connected or not self.kp:
+            raise KeePassError("Database not connected. Call connect() first.")
+        return self.kp.find_entries(uuid=uuid, first=True)  # type: ignore[misc]
+
     def get_secret(self, title: str, attribute: str) -> str | None:
         """
         Fetch a specific attribute from a KeePass entry by title.
@@ -208,11 +226,12 @@ class KeePassManager:
             attribute: Attribute name to retrieve
 
         Returns:
-            Attribute value or None if not found
+            Attribute value.
 
         Raises:
-            KeePassError: If entry is not found or access fails
-            ValidationError: If title or attribute validation fails
+            KeePassEntryNotFoundError: If the entry or attribute is not found.
+            KeePassError: If access fails for another reason.
+            ValidationError: If title or attribute validation fails.
         """
         try:
             validated_title = EntryValidator.validate_entry_title(title)
@@ -336,18 +355,10 @@ class KeePassManager:
                     raise ValidationError(f"Unresolved placeholder: {placeholder}")
                 logger.warning("Could not resolve placeholder %s", placeholder)
                 return ""
-            except KeePassEntryNotFoundError as e:
-                # A missing entry/attribute is recoverable: blank it with a
-                # warning unless strict mode was requested.
-                if strict:
-                    raise ValidationError(str(e)) from None
-                logger.warning(
-                    "Failed to resolve placeholder %s: %s",
-                    placeholder,
-                    str(e),
-                )
-                return ""
-            except ValidationError as e:
+            except (KeePassEntryNotFoundError, ValidationError) as e:
+                # A missing entry/attribute (or invalid reference) is
+                # recoverable: blank it with a warning unless strict mode was
+                # requested.
                 if strict:
                     raise ValidationError(str(e)) from None
                 logger.warning(

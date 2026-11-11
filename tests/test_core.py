@@ -17,6 +17,7 @@ from keeenv.core import (
 )
 from keeenv.exceptions import (
     ConfigError,
+    ValidationError,
 )
 
 
@@ -1026,3 +1027,87 @@ def test_main_import_is_unambiguous():
     assert callable(imported.main)
     # The package must not export a competing callable under the same name.
     assert not callable(pkg_main) or isinstance(pkg_main, types.ModuleType)
+
+
+class TestSplitRunArgv:
+    """`run` is only the subcommand in the first positional slot.
+
+    A literal ``run`` used as an option value or a later positional must not
+    truncate argv, otherwise flags after it are silently dropped.
+    """
+
+    def test_plain_run_splits(self):
+        from keeenv.core import _split_run_argv
+
+        assert _split_run_argv(["run", "echo", "hi"]) == (["run"], ["echo", "hi"])
+
+    def test_global_flags_before_run(self):
+        from keeenv.core import _split_run_argv
+
+        assert _split_run_argv(["--config", "c.ini", "run", "echo"]) == (
+            ["--config", "c.ini", "run"],
+            ["echo"],
+        )
+
+    def test_literal_run_as_option_value_is_not_subcommand(self):
+        from keeenv.core import _split_run_argv
+
+        argv = ["add", "KEY", "secret", "-t", "run", "--force"]
+        assert _split_run_argv(argv) == (argv, None)
+
+    def test_literal_run_as_kdbx_value_is_not_subcommand(self):
+        from keeenv.core import _split_run_argv
+
+        argv = ["init", "--kdbx", "run", "--force"]
+        assert _split_run_argv(argv) == (argv, None)
+
+    def test_literal_run_as_positional_is_not_subcommand(self):
+        from keeenv.core import _split_run_argv
+
+        argv = ["add", "run", "secret"]
+        assert _split_run_argv(argv) == (argv, None)
+
+    def test_equals_form_option_value_not_subcommand(self):
+        from keeenv.core import _split_run_argv
+
+        argv = ["--config=run", "eval"]
+        assert _split_run_argv(argv) == (argv, None)
+
+    def test_double_dash_then_run(self):
+        from keeenv.core import _split_run_argv
+
+        assert _split_run_argv(["--", "run", "echo"]) == (["--", "run"], ["echo"])
+
+    def test_no_run_returns_argv_unchanged(self):
+        from keeenv.core import _split_run_argv
+
+        argv = ["eval", "--strict"]
+        assert _split_run_argv(argv) == (argv, None)
+
+
+class TestAddRejectsInvalidEnvVar:
+    """`add` must validate ENV_VAR before writing to either store."""
+
+    @patch("keeenv.core.KeePassManager")
+    @patch("keeenv.core.KeeenvConfig")
+    def test_invalid_env_var_rejected_before_write(self, mock_config_class, mock_kp):
+        instance = Mock()
+        instance.get_config.return_value = configparser.ConfigParser()
+        mock_config_class.return_value = instance
+
+        with pytest.raises(ValidationError, match="Invalid environment variable"):
+            _cmd_add(
+                config_path="cfg",
+                env_var="X; rm -rf /",
+                secret="v",
+                title=None,
+                username=None,
+                url=None,
+                notes=None,
+                attribute=None,
+                force=True,
+            )
+
+        # Neither store may be touched.
+        instance.save_config.assert_not_called()
+        mock_kp.assert_not_called()
