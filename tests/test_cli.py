@@ -186,8 +186,8 @@ def test_init_creates_config_with_kdbx(tmp_path: Path):
         ["--config", str(cfg_path), "init", "--kdbx", str(kdbx)], cwd=tmp_path
     )
     # Assert
-    # init should complete without exiting non-zero (main does not print exports)
-    assert proc.returncode in (0, 1) or proc.stderr == ""  # tolerate logging behavior
+    # init should complete successfully (main does not print exports)
+    assert proc.returncode == 0, proc.stderr
     assert cfg_path.exists()
     content = read_config(cfg_path)
     assert "[keepass]" in content
@@ -219,8 +219,11 @@ def test_init_update_existing_config(tmp_path: Path):
         """,
         name=".keeenv",
     )
-    kdbx = tmp_path / "updated.kdbx"
-    kdbx.write_text("dummy")
+    # The update path re-validates the existing database, so it must be real.
+    from pykeepass import create_database
+
+    kdbx = tmp_path / "old.kdbx"
+    create_database(str(kdbx), password="pw")
     # Simulate: choose Update 'u', then accept default current db (press Enter), then keyfile blank
     input_text = "u\n\n\n"
     proc = run_cli(
@@ -228,8 +231,8 @@ def test_init_update_existing_config(tmp_path: Path):
         cwd=tmp_path,
         input_text=input_text,
     )
-    assert proc.returncode in (0, 1) or proc.stderr == ""
-    # Should remain valid and contain database (either same or updated)
+    assert proc.returncode == 0, proc.stderr
+    # Should remain valid and contain database
     content = read_config(initial_cfg)
     assert "[keepass]" in content
     assert "database =" in content

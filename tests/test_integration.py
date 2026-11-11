@@ -287,6 +287,39 @@ def test_config_relative_database_path_resolves_from_other_cwd(tmp_path):
     assert "export REL=relsecret" in result.stdout
 
 
+def test_list_empty_env_section_message(tmp_path, kdbx_db):
+    """An empty [env] section prints a message and exits 0."""
+    db_path, _ = kdbx_db
+    cfg_path = tmp_path / ".keeenv"
+    cfg_path.write_text(f"[keepass]\ndatabase = {db_path}\n\n[env]\n", encoding="utf-8")
+    result = run_cli(["--config", str(cfg_path), "list"], cwd=tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert "No environment variables found" in result.stdout
+
+
+def test_init_update_merges_keepass_fields(tmp_path):
+    """The init update path preserves [env] while rewriting [keepass]."""
+    from pykeepass import create_database
+
+    db_path = tmp_path / "db.kdbx"
+    create_database(str(db_path), password="pw")
+    cfg_path = tmp_path / ".keeenv"
+    cfg_path.write_text(
+        f'[keepass]\ndatabase = {db_path}\n\n[env]\nKEEP = ${{"E".password}}\n',
+        encoding="utf-8",
+    )
+
+    result = run_cli(
+        ["--config", str(cfg_path), "init"],
+        cwd=tmp_path,
+        input_text="u\n\n\n",
+    )
+    assert result.returncode == 0, result.stderr
+    content = cfg_path.read_text()
+    assert "[keepass]" in content
+    assert 'KEEP = ${"E".password}' in content
+
+
 def test_relative_database_path_with_parent_segment(tmp_path):
     """A `../` path in [keepass] resolves relative to the config directory."""
     from pykeepass import PyKeePass, create_database

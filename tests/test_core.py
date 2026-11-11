@@ -925,3 +925,89 @@ class TestCmdRunCommandParsing:
         mock_subprocess_run.assert_called_once()
         shell_kwarg = mock_subprocess_run.call_args[1].get("shell")
         assert shell_kwarg is False, f"Expected shell=False but got shell={shell_kwarg}"
+
+
+class TestCreateKdbxPasswordBranches:
+    """Unit coverage for _create_kdbx_with_password_interactive decisions."""
+
+    def _fn(self):
+        from keeenv.core import _create_kdbx_with_password_interactive
+
+        return _create_kdbx_with_password_interactive
+
+    def test_no_password_requires_keyfile(self):
+        with pytest.raises(ConfigError, match="requires --keyfile"):
+            self._fn()("/tmp/out.kdbx", no_password=True)
+
+    def test_empty_password_rejected(self, monkeypatch):
+        monkeypatch.delenv("KEEENV_PASSWORD", raising=False)
+        monkeypatch.setattr("keeenv.core._prompt_secret", lambda prompt: "")
+        with pytest.raises(ConfigError, match="cannot be empty"):
+            self._fn()("/tmp/out.kdbx")
+
+    def test_mismatched_passwords_rejected(self, monkeypatch):
+        monkeypatch.delenv("KEEENV_PASSWORD", raising=False)
+        answers = iter(["one", "two"])
+        monkeypatch.setattr("keeenv.core._prompt_secret", lambda prompt: next(answers))
+        with pytest.raises(ConfigError, match="do not match"):
+            self._fn()("/tmp/out.kdbx")
+
+    def test_env_password_used_without_prompting(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("KEEENV_PASSWORD", "envpw")
+        prompted = []
+        monkeypatch.setattr(
+            "keeenv.core._prompt_secret", lambda prompt: prompted.append(prompt) or ""
+        )
+        target = tmp_path / "created.kdbx"
+        self._fn()(str(target))
+        assert target.exists()
+        assert prompted == []
+
+
+class TestInitConfigInteractive:
+    """Unit coverage for _init_config_interactive branches."""
+
+    def _fn(self):
+        from keeenv.core import _init_config_interactive
+
+        return _init_config_interactive
+
+    def test_aborts_on_existing_config_by_default(self, tmp_path, monkeypatch):
+        target = tmp_path / ".keeenv"
+        target.write_text("[keepass]\ndatabase = x\n", encoding="utf-8")
+        monkeypatch.setattr("keeenv.core._prompt_input", lambda prompt: "")
+        with pytest.raises(ConfigError, match="Aborted by user"):
+            self._fn()(str(target), None, None, force=False)
+
+    def test_no_password_without_keyfile_rejected(self, tmp_path):
+        with pytest.raises(ConfigError, match="requires --keyfile"):
+            self._fn()(
+                str(tmp_path / ".keeenv"), None, None, force=True, no_password=True
+            )
+
+    def test_missing_db_path_aborts(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("keeenv.core._prompt_input", lambda prompt: "")
+        with pytest.raises(ConfigError, match="No database path provided"):
+            self._fn()(str(tmp_path / ".keeenv"), None, None, force=True)
+
+    def test_update_with_missing_database_aborts(self, tmp_path, monkeypatch):
+        target = tmp_path / ".keeenv"
+        target.write_text(
+            f"[keepass]\ndatabase = {tmp_path / 'gone.kdbx'}\n", encoding="utf-8"
+        )
+        monkeypatch.setattr("keeenv.core._prompt_input", lambda prompt: "u")
+        with pytest.raises(ConfigError, match="not found"):
+            self._fn()(str(target), None, None, force=False)
+
+    def test_force_overwrites_existing_config(self, tmp_path, monkeypatch):
+        target = tmp_path / ".keeenv"
+        target.write_text("[keepass]\ndatabase = old\n", encoding="utf-8")
+        db = tmp_path / "new.kdbx"
+        from pykeepass import create_database
+
+        create_database(str(db), password="pw")
+        monkeypatch.setattr("keeenv.core._prompt_input", lambda prompt: "")
+        self._fn()(str(target), str(db), None, force=True)
+        content = target.read_text()
+        assert str(db) in content
+        assert "[env]" in content
