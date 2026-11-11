@@ -82,6 +82,103 @@ def test_eval_logging_quiet_sets_error_level(tmp_path: Path):
     assert "Warning" not in proc.stderr
 
 
+def test_strict_accepted_after_subcommand(tmp_path: Path):
+    # The natural `keeenv eval --strict` form must reach the same code path as
+    # the pre-verb form: a real config/DB error, not an argparse exit 2.
+    cfg = write_config(
+        tmp_path,
+        """
+        [keepass]
+        database = ./missing-db.kdbx
+
+        [env]
+        FOO = ${"Entry".password}
+        """,
+    )
+    proc = run_cli(["--config", str(cfg), "eval", "--strict"])
+    assert "unrecognized arguments" not in proc.stderr
+    assert proc.returncode == 1
+    assert proc.returncode != 2
+
+
+def test_strict_before_subcommand_still_works(tmp_path: Path):
+    # The pre-verb form must keep working now that subparsers mirror the flags.
+    cfg = write_config(
+        tmp_path,
+        """
+        [keepass]
+        database = ./missing-db.kdbx
+
+        [env]
+        FOO = ${"Entry".password}
+        """,
+    )
+    proc = run_cli(["--config", str(cfg), "--strict", "eval"])
+    assert "unrecognized arguments" not in proc.stderr
+    assert proc.returncode == 1
+    assert proc.returncode != 2
+
+
+def test_config_accepted_after_subcommand(tmp_path: Path):
+    cfg = write_config(
+        tmp_path,
+        """
+        [keepass]
+        database = ./missing-db.kdbx
+
+        [env]
+        AFTER = ${"Entry".password}
+        """,
+    )
+    proc = run_cli(["list", "--config", str(cfg)])
+    assert proc.returncode == 0, proc.stderr
+    assert "AFTER" in proc.stdout
+
+
+def test_quiet_accepted_after_subcommand(tmp_path: Path):
+    cfg = write_config(
+        tmp_path,
+        """
+        [keepass]
+        database = ./missing-db.kdbx
+
+        [env]
+        FOO = ${"Entry".password}
+        """,
+    )
+    proc = run_cli(["--config", str(cfg), "eval", "--quiet"])
+    assert "unrecognized arguments" not in proc.stderr
+    assert proc.returncode == 1
+    assert "Warning" not in proc.stderr
+
+
+def test_run_still_passes_flags_to_child(tmp_path: Path):
+    # Mirroring flags onto subparsers must not have touched `run`.
+    from pykeepass import PyKeePass, create_database
+
+    db = tmp_path / "r.kdbx"
+    create_database(str(db), password="pw")
+    seed = PyKeePass(str(db), password="pw")
+    seed.add_entry(seed.root_group, title="E", username="", password="v")
+    seed.save()
+    cfg = write_config(
+        tmp_path,
+        f"""
+        [keepass]
+        database = {db}
+
+        [env]
+        R = ${{"E".password}}
+        """,
+    )
+    proc = run_cli(
+        ["--config", str(cfg), "run", "echo", "--verbose", "--strict"],
+        env={"KEEENV_PASSWORD": "pw"},
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "--verbose --strict" in proc.stdout
+
+
 def test_eval_logging_verbose_allows_debug(tmp_path: Path):
     cfg = write_config(
         tmp_path,

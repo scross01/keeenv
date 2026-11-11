@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Global options such as `--strict`, `--config`, `--quiet` and `--verbose` are now accepted after the subcommand too, so `keeenv eval --strict` works.
 - Entry titles containing a double quote are rejected with a clear error instead of producing a mapping that can never be resolved.
 - `.keeenv` files can reference a database with a `../` path; the blanket `..` rejection was removed.
 - A relative `database` or `keyfile` path in `.keeenv` is now resolved relative to the config file, so `--config ./config/.keeenv` works from any directory.

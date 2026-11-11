@@ -42,6 +42,48 @@ def _handle_error(error) -> None:
     raise error
 
 
+def _add_global_flags(
+    target: argparse.ArgumentParser, *, include_strict: bool = True
+) -> None:
+    """
+    Mirror the global flags onto a subparser so they also work after the verb.
+
+    ``default=argparse.SUPPRESS`` is load-bearing: without it the subparser's
+    default would overwrite a value supplied before the subcommand, breaking
+    ``keeenv --strict eval``. With SUPPRESS the attribute is only set when the
+    flag actually appears after the verb.
+
+    Do NOT apply this to the ``run`` subparser: everything after ``run`` belongs
+    to the child process.
+    """
+    group = target.add_mutually_exclusive_group()
+    group.add_argument(
+        "--quiet",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Reduce logging output (only errors)",
+    )
+    group.add_argument(
+        "--verbose",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Increase logging verbosity (debug details)",
+    )
+    target.add_argument(
+        "--config",
+        metavar="PATH",
+        default=argparse.SUPPRESS,
+        help=f"Path to configuration file (default: {CONFIG_FILENAME})",
+    )
+    if include_strict:
+        target.add_argument(
+            "--strict",
+            action="store_true",
+            default=argparse.SUPPRESS,
+            help="Fail if any placeholder cannot be resolved",
+        )
+
+
 def _create_argument_parser() -> argparse.ArgumentParser:
     """Create and configure the argument parser."""
     from . import __version__
@@ -87,18 +129,20 @@ def _create_argument_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="subcommand", help="Subcommands")
 
     # eval subcommand
-    subparsers.add_parser(
+    eval_parser = subparsers.add_parser(
         "eval",
         help="Evaluate and export environment variables",
         description="Export environment variables from KeePass database",
     )
+    _add_global_flags(eval_parser)
 
     # list subcommand
-    subparsers.add_parser(
+    list_parser = subparsers.add_parser(
         "list",
         help="List environment variable names from .keeenv",
         description="List all environment variable names defined in the [env] section of .keeenv",
     )
+    _add_global_flags(list_parser)
 
     # run subcommand
     run_parser = subparsers.add_parser(
@@ -118,6 +162,7 @@ def _create_argument_parser() -> argparse.ArgumentParser:
         help="Initialize a new .keeenv configuration file",
         description="Create or update a .keeenv file with [keepass] entries",
     )
+    _add_global_flags(init_parser, include_strict=False)
     init_parser.add_argument(
         "--kdbx",
         metavar="PATH",
@@ -154,6 +199,7 @@ def _create_argument_parser() -> argparse.ArgumentParser:
             'in the .keeenv file. Example: keeenv add "GEMINI_API_KEY" "xxxx"'
         ),
     )
+    _add_global_flags(add_parser, include_strict=False)
     add_parser.add_argument(
         "env_var",
         metavar="ENV_VAR",
