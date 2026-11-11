@@ -113,6 +113,45 @@ database = tests/secrets.kdbx
             config_manager.validate_config_file("/nonexistent/config.ini")
 
 
+class TestConfigInterpolation:
+    """Config values and keys are literal: '%' must survive write and read."""
+
+    def test_config_roundtrips_percent_in_value(self, tmp_path):
+        cfg_path = tmp_path / ".keeenv"
+        manager = KeeenvConfig(str(cfg_path))
+        cfg = manager._make_case_preserving_config()
+        cfg["keepass"] = {"database": str(tmp_path / "secrets.kdbx")}
+        cfg["env"] = {"LITERAL": "50% off"}
+        manager.save_config(cfg)
+
+        reloaded = KeeenvConfig(str(cfg_path))
+        assert reloaded.get_env_vars()["LITERAL"] == "50% off"
+
+    def test_config_roundtrips_percent_in_placeholder_title(self, tmp_path):
+        cfg_path = tmp_path / ".keeenv"
+        manager = KeeenvConfig(str(cfg_path))
+        cfg = manager._make_case_preserving_config()
+        cfg["keepass"] = {"database": str(tmp_path / "secrets.kdbx")}
+        cfg["env"] = {"PCT": '${"100% Real".Password}'}
+        manager.save_config(cfg)
+
+        reloaded = KeeenvConfig(str(cfg_path))
+        assert reloaded.get_env_vars()["PCT"] == '${"100% Real".Password}'
+
+    def test_config_reads_handwritten_percent_placeholder(self, tmp_path):
+        cfg_path = tmp_path / ".keeenv"
+        cfg_path.write_text(
+            "[keepass]\n"
+            f"database = {tmp_path / 'secrets.kdbx'}\n\n"
+            "[env]\n"
+            'PCT = ${"100% Real".Password}\n',
+            encoding="utf-8",
+        )
+        assert KeeenvConfig(str(cfg_path)).get_env_vars()["PCT"] == (
+            '${"100% Real".Password}'
+        )
+
+
 class TestMainFunction:
     """Test main function"""
 

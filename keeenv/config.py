@@ -39,7 +39,7 @@ class KeeenvConfig:
             def optionxform(self, optionstr: str) -> str:  # type: ignore[override]
                 return optionstr
 
-        cfg = _CasePreservingConfig()
+        cfg = _CasePreservingConfig(interpolation=None)
         # Preserve section case on write (ConfigParser may lowercase without this)
         cfg._dict = dict  # type: ignore[attr-defined]
         return cfg

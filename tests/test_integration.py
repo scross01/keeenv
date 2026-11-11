@@ -149,6 +149,38 @@ def test_run_still_fails_closed_on_missing_entry(tmp_path, kdbx_db):
     assert "should-not-run" not in result.stdout
 
 
+def test_add_and_eval_entry_title_with_percent(tmp_path):
+    """A '%' in an entry title must round-trip through add -> config -> eval."""
+    from pykeepass import create_database
+
+    db_path = tmp_path / "pct.kdbx"
+    create_database(str(db_path), password="pw")
+    cfg_path = tmp_path / ".keeenv"
+    cfg_path.write_text(f"[keepass]\ndatabase = {db_path}\n\n[env]\n", encoding="utf-8")
+    env = {"KEEENV_PASSWORD": "pw"}
+
+    added = run_cli(
+        [
+            "--config",
+            str(cfg_path),
+            "add",
+            "PCT_VAR",
+            "pctsecret",
+            "-t",
+            "100% Real",
+            "--force",
+        ],
+        cwd=tmp_path,
+        env=env,
+    )
+    assert added.returncode == 0, added.stderr
+    assert '${"100% Real".password}' in cfg_path.read_text()
+
+    evaluated = run_cli(["--config", str(cfg_path), "eval"], cwd=tmp_path, env=env)
+    assert evaluated.returncode == 0, evaluated.stderr
+    assert "export PCT_VAR=pctsecret" in evaluated.stdout
+
+
 def test_eval_preserves_custom_attribute_case(tmp_path, kdbx_db):
     """Custom attribute names with mixed case and spaces work correctly."""
     db_path, _ = kdbx_db
