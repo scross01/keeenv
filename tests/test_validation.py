@@ -13,6 +13,7 @@ from keeenv.exceptions import DatabaseSecurityError, ValidationError
 from keeenv.validation import (
     AttributeValidator,
     EntryValidator,
+    EnvVarValidator,
     PathValidator,
     SecurityValidator,
 )
@@ -166,6 +167,43 @@ class TestAttributeValidator:
         for name in valid_names:
             result = AttributeValidator.validate_attribute(name)
             assert result == name
+
+
+class TestEnvVarValidator:
+    """Test EnvVarValidator class"""
+
+    @pytest.mark.parametrize(
+        "name", ["FOO", "TF_VAR_api_key", "_private", "a1", "A_B_C"]
+    )
+    def test_validate_env_var_name_valid(self, name):
+        """Test valid environment variable names are accepted unchanged"""
+        assert EnvVarValidator.validate_env_var_name(name) == name
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "",
+            None,
+            "1BAD",
+            "has space",
+            "X; rm -rf /",
+            "$(id)",
+            "with-dash",
+            " leading",
+            "trailing ",
+            "A=B",
+        ],
+    )
+    def test_validate_env_var_name_invalid(self, name):
+        """Test invalid environment variable names are rejected"""
+        with pytest.raises(ValidationError):
+            EnvVarValidator.validate_env_var_name(name)
+
+    def test_validate_env_var_name_rejects_shell_metacharacters(self):
+        """Names are rendered into `export` lines, so metacharacters must fail"""
+        for name in ["X; touch /tmp/pwned", "A`id`", "B&&id", "C|id"]:
+            with pytest.raises(ValidationError, match="Invalid environment variable"):
+                EnvVarValidator.validate_env_var_name(name)
 
 
 class TestSecurityValidator:

@@ -7,6 +7,7 @@ import os
 import re
 from pathlib import Path
 
+from keeenv.constants import IDENT_RE
 from keeenv.exceptions import (
     AttributeValidationError,
     DatabaseSecurityError,
@@ -193,6 +194,36 @@ class AttributeValidator(BaseValidator):
             )
 
         return validated_attr
+
+
+class EnvVarValidator(BaseValidator):
+    """Validates environment variable names against shell identifier rules."""
+
+    @staticmethod
+    def validate_env_var_name(name: str | None) -> str:
+        """
+        Validate an environment variable name.
+
+        Names are rendered into ``export`` statements that users evaluate in a
+        shell, so they must be valid shell identifiers. The raw value is checked
+        (no stripping) so surrounding whitespace is rejected rather than
+        silently normalized.
+
+        Args:
+            name: Environment variable name to validate
+
+        Returns:
+            Validated environment variable name
+
+        Raises:
+            ValidationError: If the name is empty or not a shell identifier
+        """
+        validated = BaseValidator.validate_non_empty_string(
+            name, "Environment variable name"
+        )
+        if not IDENT_RE.match(validated):
+            raise ValidationError(f"Invalid environment variable name: {validated}")
+        return validated
 
 
 class SecurityValidator:

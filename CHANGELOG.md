@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `eval` and `list` now reject invalid environment variable names instead of emitting them into shell output, preventing command injection when the output is evaluated.
 - Fixed `run` command to fail cleanly with a clear error when the requested command is not found, instead of printing a traceback.
 
 ## v0.6.0

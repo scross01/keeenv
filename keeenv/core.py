@@ -26,6 +26,7 @@ from keeenv.keepass import KeePassManager
 from keeenv.validation import (
     AttributeValidator,
     EntryValidator,
+    EnvVarValidator,
     PathValidator,
 )
 
@@ -618,9 +619,10 @@ def _cmd_list(*, config_path: str) -> None:
         env_vars = config_manager.get_env_vars()
 
         if env_vars:
-            # Print each environment variable name on a separate line
+            # Print each environment variable name on a separate line.
+            # Validate first so an invalid name never reaches a shell.
             for var_name in env_vars:
-                print(var_name)
+                print(EnvVarValidator.validate_env_var_name(var_name))
             logger.info(
                 "Listed %d environment variable(s) from %s",
                 len(env_vars),
@@ -757,7 +759,7 @@ def main() -> None:
     if getattr(args, "subcommand", None) == "list":
         try:
             _cmd_list(config_path=args.config)
-        except (ConfigError, ConfigFileNotFoundError) as e:
+        except (ConfigError, ConfigFileNotFoundError, ValidationError) as e:
             _handle_error(e)
         except Exception:
             raise
@@ -781,6 +783,17 @@ def main() -> None:
         config_manager = KeeenvConfig(args.config)
         config = config_manager.get_config()
 
+        # Validate environment variable names before touching the database:
+        # names are rendered into `export` lines the user evaluates in a shell,
+        # so a malformed name must fail fast (no password prompt, no exports).
+        env_items = []
+        if ENV_SECTION in config:
+            env_config = config[ENV_SECTION]
+            for var_name, value_template in env_config.items():
+                env_items.append(
+                    (EnvVarValidator.validate_env_var_name(var_name), value_template)
+                )
+
         # Validate Keepass configuration and get paths
         validated_db_path, validated_keyfile_path = (
             config_manager.validate_keepass_config(config)
@@ -793,15 +806,13 @@ def main() -> None:
         try:
             # Process environment variables using KeePassManager
             exports = []
-            if ENV_SECTION in config:
-                env_config = config[ENV_SECTION]
-                for var_name, value_template in env_config.items():
-                    strict_mode = bool(getattr(args, "strict", False))
-                    final_value = kp_manager.substitute_placeholders(
-                        value_template, strict=strict_mode
-                    )
-                    # Use shlex.quote for safe shell exporting
-                    exports.append(f"export {var_name}={shlex.quote(final_value)}")
+            strict_mode = bool(getattr(args, "strict", False))
+            for validated_name, value_template in env_items:
+                final_value = kp_manager.substitute_placeholders(
+                    value_template, strict=strict_mode
+                )
+                # Use shlex.quote for safe shell exporting
+                exports.append(f"export {validated_name}={shlex.quote(final_value)}")
 
             # Print export commands
             if exports:

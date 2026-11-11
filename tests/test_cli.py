@@ -136,6 +136,43 @@ def test_eval_strict_mode_fails_on_unresolved_placeholder(tmp_path: Path):
     assert proc.stderr != ""
 
 
+def test_eval_rejects_invalid_env_var_name(tmp_path: Path):
+    # Env var names are rendered into `export` lines the user evaluates.
+    # A name with shell metacharacters must be rejected before any output.
+    cfg = write_config(
+        tmp_path,
+        """
+        [keepass]
+        database = ./missing-db.kdbx
+
+        [env]
+        X;echo = ${"Entry".password}
+        """,
+    )
+    proc = run_cli(["--config", str(cfg), "eval"])
+    assert proc.returncode != 0
+    assert "Invalid environment variable name" in proc.stderr
+    assert "export X;" not in proc.stdout
+    assert proc.stdout.strip() == ""
+
+
+def test_list_rejects_invalid_env_var_name(tmp_path: Path):
+    # `eval unset $(keeenv list)` means list output is also shell-interpreted.
+    cfg = write_config(
+        tmp_path,
+        """
+        [keepass]
+        database = ./missing-db.kdbx
+
+        [env]
+        A$(id) = ${"Entry".password}
+        """,
+    )
+    proc = run_cli(["--config", str(cfg), "list"])
+    assert proc.returncode != 0
+    assert "Invalid environment variable name" in proc.stderr
+
+
 def test_eval_non_strict_blanks_unresolved_placeholders(tmp_path: Path):
     # Non-strict should not crash due to unresolved placeholders during substitution.
     # Because db is missing it will still fail; this verifies non-strict invocation path.
