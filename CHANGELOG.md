@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `.keeenv` files can reference a database with a `../` path; the blanket `..` rejection was removed.
 - A relative `database` or `keyfile` path in `.keeenv` is now resolved relative to the config file, so `--config ./config/.keeenv` works from any directory.
 - `run` no longer passes `KEEENV_PASSWORD` to the command it executes.
 - `run` now passes all arguments after the command through to the child, so flags like `keeenv run curl -H ...` and `keeenv run pytest --strict` work.

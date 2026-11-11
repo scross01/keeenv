@@ -287,6 +287,35 @@ def test_config_relative_database_path_resolves_from_other_cwd(tmp_path):
     assert "export REL=relsecret" in result.stdout
 
 
+def test_relative_database_path_with_parent_segment(tmp_path):
+    """A `../` path in [keepass] resolves relative to the config directory."""
+    from pykeepass import PyKeePass, create_database
+
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    db_path = shared / "s.kdbx"
+    create_database(str(db_path), password="pw")
+    kp = PyKeePass(str(db_path), password="pw")
+    kp.add_entry(kp.root_group, title="P", username="", password="pp")
+    kp.save()
+
+    cfg_dir = tmp_path / "app"
+    cfg_dir.mkdir()
+    cfg_path = cfg_dir / ".keeenv"
+    cfg_path.write_text(
+        '[keepass]\ndatabase = ../shared/s.kdbx\n\n[env]\nP = ${"P".password}\n',
+        encoding="utf-8",
+    )
+
+    result = run_cli(
+        ["--config", str(cfg_path), "eval"],
+        cwd=tmp_path,
+        env={"KEEENV_PASSWORD": "pw"},
+    )
+    assert result.returncode == 0, result.stderr
+    assert "export P=pp" in result.stdout
+
+
 def test_run_does_not_forward_master_password(tmp_path, kdbx_db):
     """The auth variable must not leak into the child process environment."""
     db_path, _ = kdbx_db

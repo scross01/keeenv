@@ -44,10 +44,22 @@ class TestPathValidator:
         with pytest.raises(ValidationError, match="Path must be a non-empty string"):
             PathValidator.validate_file_path(None)
 
-    def test_validate_file_path_directory_traversal(self):
-        """Test validation prevents directory traversal"""
-        with pytest.raises(ValidationError, match="Invalid path format"):
-            PathValidator.validate_file_path("../../etc/passwd")
+    def test_validate_file_path_allows_parent_relative(self):
+        """A legitimate `..` path resolves instead of being rejected."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sub = Path(tmp_dir) / "sub"
+            sub.mkdir()
+            target = sub / "file.txt"
+            target.write_text("x")
+            result = PathValidator.validate_file_path(
+                str(sub / ".." / "sub" / "file.txt")
+            )
+            assert result == target.resolve()
+
+    def test_validate_file_path_parent_relative_missing(self):
+        """A missing `..` path reports File not found, not a format error."""
+        with pytest.raises(ValidationError, match=r"File not found:"):
+            PathValidator.validate_file_path("/nonexistent/../nope/file.txt")
 
         # Tilde expands to home; with must_exist=True the validator raises File not found
         with pytest.raises(ValidationError, match=r"File not found:"):

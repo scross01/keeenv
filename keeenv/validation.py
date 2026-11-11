@@ -27,7 +27,6 @@ MAX_ASCII_VALUE = 126
 CUSTOM_PROPERTY_PATTERN = r"^[a-zA-Z_][a-zA-Z0-9_ ]*$"
 
 # Constants for error messages
-ERROR_PATH_INVALID_FORMAT = "Invalid path format"
 ERROR_ATTR_INVALID_NAME = "Invalid attribute name"
 ERROR_KEYFILE_WORLD_READABLE = (
     "Keyfile is world-readable. Please restrict permissions to owner only."
@@ -89,10 +88,10 @@ class PathValidator(BaseValidator):
         # Validate basic string requirements
         validated_path = BaseValidator.validate_non_empty_string(path, "Path")
 
-        # Prevent directory traversal
-        if ".." in validated_path:
-            raise PathValidationError(ERROR_PATH_INVALID_FORMAT)
-
+        # Note: no `..` substring ban here. Paths are canonicalized below with
+        # resolve(), and this is a local CLI operating on files the user names —
+        # the user already controls the filesystem. A substring check blocked
+        # legitimate paths like `../shared/secrets.kdbx` without adding safety.
         try:
             expanded_path = Path(validated_path).expanduser().resolve()
         except (OSError, RuntimeError) as e:
