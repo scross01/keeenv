@@ -176,6 +176,15 @@ def test_list_rejects_invalid_env_var_name(tmp_path: Path):
 # --- New tests for `keeenv init` subcommand ---
 
 
+def test_list_error_logged_once(tmp_path: Path):
+    # A known error is logged at exactly one layer, not by both the command
+    # and its dispatch handler.
+    cfg = write_config(tmp_path, "[keepass]\n")  # missing 'database'
+    proc = run_cli(["--config", str(cfg), "list"])
+    assert proc.returncode == 1
+    assert proc.stderr.count("Missing required 'database'") == 1
+
+
 def test_init_creates_config_with_kdbx(tmp_path: Path):
     # Arrange: create a fake kdbx file
     kdbx = tmp_path / "secrets.kdbx"

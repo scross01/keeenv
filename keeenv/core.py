@@ -646,31 +646,26 @@ def _cmd_list(*, config_path: str) -> None:
     """
     logger = logging.getLogger(__name__)
 
-    try:
-        # Load configuration file
-        config_manager = KeeenvConfig(config_path)
+    # Load configuration file. Exceptions propagate to the dispatch layer in
+    # main(), which logs them once — handling them here as well double-logs.
+    config_manager = KeeenvConfig(config_path)
 
-        # Get environment variables from [env] section
-        env_vars = config_manager.get_env_vars()
+    # Get environment variables from [env] section
+    env_vars = config_manager.get_env_vars()
 
-        if env_vars:
-            # Print each environment variable name on a separate line.
-            # Validate first so an invalid name never reaches a shell.
-            for var_name in env_vars:
-                print(EnvVarValidator.validate_env_var_name(var_name))
-            logger.info(
-                "Listed %d environment variable(s) from %s",
-                len(env_vars),
-                config_path,
-            )
-        else:
-            print("No environment variables found in [env] section")
-            logger.info("No environment variables found in %s", config_path)
-
-    except ConfigFileNotFoundError as e:
-        _handle_error(e)
-    except ConfigError as e:
-        _handle_error(e)
+    if env_vars:
+        # Print each environment variable name on a separate line.
+        # Validate first so an invalid name never reaches a shell.
+        for var_name in env_vars:
+            print(EnvVarValidator.validate_env_var_name(var_name))
+        logger.info(
+            "Listed %d environment variable(s) from %s",
+            len(env_vars),
+            config_path,
+        )
+    else:
+        print("No environment variables found in [env] section")
+        logger.info("No environment variables found in %s", config_path)
 
 
 def _cmd_run(*, config_path: str, command: list[str]) -> None:
