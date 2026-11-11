@@ -259,6 +259,56 @@ def test_add_and_eval_entry_title_with_percent(tmp_path):
     assert "export PCT_VAR=pctsecret" in evaluated.stdout
 
 
+def test_run_passes_dash_prefixed_args(tmp_path, kdbx_config):
+    """Child flags are passed through, not consumed by keeenv's parser."""
+    result = run_cli(
+        ["run", "echo", "--foo", "bar"],
+        cwd=tmp_path,
+        env={"KEEENV_PASSWORD": "testpass"},
+    )
+    assert result.returncode == 0, result.stderr
+    assert "--foo bar" in result.stdout
+
+
+def test_run_passes_flag_colliding_with_keeenv(tmp_path, kdbx_config):
+    """A child flag matching a keeenv global flag must still reach the child."""
+    result = run_cli(
+        ["run", "echo", "--strict"],
+        cwd=tmp_path,
+        env={"KEEENV_PASSWORD": "testpass"},
+    )
+    assert result.returncode == 0, result.stderr
+    assert "--strict" in result.stdout
+
+
+def test_run_passes_negative_number(tmp_path, kdbx_config):
+    """echo -n consumes the flag, proving it reached the child."""
+    result = run_cli(
+        ["run", "echo", "-n", "hi"],
+        cwd=tmp_path,
+        env={"KEEENV_PASSWORD": "testpass"},
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "hi"
+
+
+def test_run_keeps_literal_double_dash(tmp_path, kdbx_config):
+    """A literal -- is forwarded, not stripped."""
+    result = run_cli(
+        ["run", "echo", "--", "x"],
+        cwd=tmp_path,
+        env={"KEEENV_PASSWORD": "testpass"},
+    )
+    assert result.returncode == 0, result.stderr
+    assert "-- x" in result.stdout
+
+
+def test_run_without_command_errors(tmp_path, kdbx_config):
+    result = run_cli(["run"], cwd=tmp_path, env={"KEEENV_PASSWORD": "testpass"})
+    assert result.returncode != 0
+    assert "No command specified" in result.stderr
+
+
 def test_eval_preserves_custom_attribute_case(tmp_path, kdbx_db):
     """Custom attribute names with mixed case and spaces work correctly."""
     db_path, _ = kdbx_db

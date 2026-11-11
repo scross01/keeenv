@@ -93,6 +93,10 @@ eval "$(keeenv --config ./config/.keeenv --strict eval)"
   - `COMMAND`: The command to execute.
   - `ARGS...`: Additional arguments to pass to the command.
 
+`keeenv`'s own options must appear **before** `run`. Everything after `run`
+belongs to the child process and is passed through untouched, including flags
+such as `-n`, `--strict`, or a literal `--`.
+
 Behavior:
 
 - Reads the `[env]` section from the `.keeenv` configuration file

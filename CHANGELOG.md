@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `run` now passes all arguments after the command through to the child, so flags like `keeenv run curl -H ...` and `keeenv run pytest --strict` work.
 - `add` no longer leaves an orphaned KeePass entry when you decline to overwrite an existing `.keeenv` mapping.
 - `add` no longer crashes when the `.keeenv` file has no `[env]` section.
 - Entry titles and values containing `%` are now stored and read literally instead of raising an interpolation error.

@@ -108,8 +108,8 @@ def _create_argument_parser() -> argparse.ArgumentParser:
     )
     run_parser.add_argument(
         "command",
-        nargs="+",
-        help="Command and arguments to execute",
+        nargs="*",
+        help="Command and arguments to execute (everything after 'run' is passed through)",
     )
 
     # init subcommand
@@ -684,6 +684,9 @@ def _cmd_run(*, config_path: str, command: list[str]) -> None:
     """
     logger = logging.getLogger(__name__)
 
+    if not command:
+        raise ValidationError("No command specified after 'run'")
+
     # Load and validate configuration
     config_manager = KeeenvConfig(config_path)
     config = config_manager.get_config()
@@ -736,11 +739,39 @@ def _cmd_run(*, config_path: str, command: list[str]) -> None:
         kp_manager.disconnect()
 
 
+def _split_run_argv(argv: list[str]) -> tuple[list[str], list[str] | None]:
+    """
+    Split argv into (arguments for argparse, child command or None).
+
+    Everything after the first ``run`` subcommand token belongs to the child
+    process, verbatim — including tokens that look like keeenv's own options
+    (``--strict``, ``-n``, a literal ``--``). argparse's REMAINDER does not do
+    this: it still claims tokens matching a known option.
+
+    ``--config`` takes a value, so a config path literally named ``run`` must
+    not be mistaken for the subcommand; the following token is skipped.
+    """
+
+    skip_next = False
+    for i, token in enumerate(argv):
+        if skip_next:
+            skip_next = False
+            continue
+        if token == "--config":
+            skip_next = True
+            continue
+        if token == "run":
+            return argv[: i + 1], argv[i + 1 :]
+    return argv, None
+
+
 def main() -> None:
     """Main function to read config, fetch secrets, and set the environment."""
-    # Parse command line arguments
+    # Parse command line arguments. For `run`, everything after the subcommand
+    # is the child's argv and must not be interpreted by argparse.
     parser = _create_argument_parser()
-    args = parser.parse_args()
+    parse_argv, run_command = _split_run_argv(sys.argv[1:])
+    args = parser.parse_args(parse_argv)
 
     # If no arguments provided, show extended help
     if len(sys.argv) == 1:
@@ -803,7 +834,7 @@ def main() -> None:
     # Check if args.subcommand is the string "run" (subcommand name)
     if getattr(args, "subcommand", None) == "run":
         try:
-            _cmd_run(config_path=args.config, command=args.command)
+            _cmd_run(config_path=args.config, command=run_command or [])
         except (ConfigError, KeePassError, ValidationError, SecurityError) as e:
             _handle_error(e)
         except Exception:
