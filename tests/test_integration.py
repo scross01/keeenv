@@ -149,6 +149,26 @@ def test_run_still_fails_closed_on_missing_entry(tmp_path, kdbx_db):
     assert "should-not-run" not in result.stdout
 
 
+def test_add_creates_env_section_when_absent(tmp_path):
+    """`add` must work against a config that has no [env] section yet."""
+    from pykeepass import create_database
+
+    db_path = tmp_path / "s.kdbx"
+    create_database(str(db_path), password="pw")
+    cfg_path = tmp_path / ".keeenv"
+    cfg_path.write_text(f"[keepass]\ndatabase = {db_path}\n", encoding="utf-8")
+
+    result = run_cli(
+        ["--config", str(cfg_path), "add", "NEW_VAR", "secret", "--force"],
+        cwd=tmp_path,
+        env={"KEEENV_PASSWORD": "pw"},
+    )
+    assert result.returncode == 0, result.stderr
+    content = cfg_path.read_text()
+    assert "[env]" in content
+    assert '"NEW_VAR"' in content
+
+
 def test_add_and_eval_entry_title_with_percent(tmp_path):
     """A '%' in an entry title must round-trip through add -> config -> eval."""
     from pykeepass import create_database

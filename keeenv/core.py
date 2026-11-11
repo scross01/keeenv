@@ -574,6 +574,10 @@ def _cmd_add(
     placeholder = kp_manager.format_placeholder(eff_title, eff_attr_valid)
 
     # Preserve exact case of env_var when writing
+    # Ensure [env] exists (configs created by `init` may lack it)
+    if ENV_SECTION not in cfg:
+        cfg[ENV_SECTION] = {}
+
     # If mapping already exists and not forcing, prompt before overwrite
     existing_mapping = cfg[ENV_SECTION].get(env_var)
     if existing_mapping is not None and not force:
