@@ -371,7 +371,15 @@ class KeePassManager:
         Format a placeholder string ${"Title".Attr} using the same identifier rules
         as the substitution regex. Always quote the title, and quote attribute only
         when it is not a valid identifier ([A-Za-z_][A-Za-z0-9_]*).
+
+        Raises:
+            ValidationError: If the title or attribute contains a double quote,
+                which placeholder syntax cannot represent.
         """
+        if '"' in title or '"' in attr:
+            raise ValidationError(
+                "Cannot format placeholder: title or attribute contains a double quote"
+            )
         # Attribute needs quotes if not a valid identifier
         needs_quote = not IDENT_RE.match(attr)
         placeholder_attr = f'"{attr}"' if needs_quote else attr

@@ -118,6 +118,11 @@ class TestEntryValidator:
         ):
             EntryValidator.validate_entry_title("Invalid\x00Title")
 
+    def test_validate_entry_title_rejects_double_quote(self):
+        """A double quote cannot be represented in placeholder syntax."""
+        with pytest.raises(ValidationError, match="double quotes"):
+            EntryValidator.validate_entry_title('He said "hi"')
+
     def test_validate_entry_title_printable_chars(self):
         """Test validation with printable characters"""
         result = EntryValidator.validate_entry_title("Entry with spaces!@#$%^&*()")

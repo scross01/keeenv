@@ -288,6 +288,16 @@ class TestFormatPlaceholder:
         result = manager.format_placeholder("test_entry", "API Key")
         assert result == '${"test_entry"."API Key"}'
 
+    def test_format_placeholder_rejects_quote_in_title(self, manager):
+        """A title containing a quote would produce an unparseable placeholder."""
+        with pytest.raises(ValidationError, match="double quote"):
+            manager.format_placeholder('He said "hi"', "password")
+
+    def test_format_placeholder_rejects_quote_in_attr(self, manager):
+        """An attribute containing a quote is likewise unrepresentable."""
+        with pytest.raises(ValidationError, match="double quote"):
+            manager.format_placeholder("test_entry", 'we"ird')
+
 
 class TestDeleteEntry:
     """Tests for delete_entry method."""

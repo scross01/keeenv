@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Entry titles containing a double quote are rejected with a clear error instead of producing a mapping that can never be resolved.
 - `.keeenv` files can reference a database with a `../` path; the blanket `..` rejection was removed.
 - A relative `database` or `keyfile` path in `.keeenv` is now resolved relative to the config file, so `--config ./config/.keeenv` works from any directory.
 - `run` no longer passes `KEEENV_PASSWORD` to the command it executes.

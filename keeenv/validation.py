@@ -11,6 +11,7 @@ from keeenv.constants import IDENT_RE
 from keeenv.exceptions import (
     AttributeValidationError,
     DatabaseSecurityError,
+    EntryTitleValidationError,
     KeyfileSecurityError,
     PathValidationError,
     ValidationError,
@@ -136,7 +137,16 @@ class EntryValidator(BaseValidator):
             validated_title, "Entry title"
         )
 
-        return validated_title.strip()
+        # Double quotes cannot be represented in placeholder syntax
+        # (${"Title".Attr} uses `[^"]+` for the title), so accepting one would
+        # write a mapping that can never be parsed back.
+        validated_title = validated_title.strip()
+        if '"' in validated_title:
+            raise EntryTitleValidationError(
+                "Entry title cannot contain double quotes (unsupported in placeholder syntax)"
+            )
+
+        return validated_title
 
 
 class AttributeValidator(BaseValidator):
