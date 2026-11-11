@@ -377,6 +377,22 @@ class KeePassManager:
         placeholder_attr = f'"{attr}"' if needs_quote else attr
         return f'${{"{title}".{placeholder_attr}}}'
 
+    def delete_entry(self, entry) -> None:
+        """
+        Delete an entry from the KeePass database.
+
+        Args:
+            entry: Entry object to delete
+
+        Raises:
+            KeePassError: If the database is not connected
+        """
+        if not self._is_connected:
+            raise KeePassError("Database not connected. Call connect() first.")
+        if not self.kp:
+            raise KeePassError("Database not connected. Call connect() first.")
+        self.kp.delete_entry(entry)
+
     def save_database(self) -> None:
         """Save changes to KeePass database."""
         if not self._is_connected:

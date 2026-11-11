@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `add` no longer leaves an orphaned KeePass entry when you decline to overwrite an existing `.keeenv` mapping.
 - `add` no longer crashes when the `.keeenv` file has no `[env]` section.
 - Entry titles and values containing `%` are now stored and read literally instead of raising an interpolation error.
 - `eval` no longer fails the whole export when a single placeholder cannot be resolved; unresolvable variables are exported empty with a warning unless `--strict` is set. Genuine database failures still abort.

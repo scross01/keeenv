@@ -149,6 +149,64 @@ def test_run_still_fails_closed_on_missing_entry(tmp_path, kdbx_db):
     assert "should-not-run" not in result.stdout
 
 
+def test_add_declines_mapping_overwrite_leaves_no_orphan(tmp_path):
+    """Declining the mapping prompt must not leave an orphaned KeePass entry."""
+    from pykeepass import PyKeePass, create_database
+
+    db_path = tmp_path / "orphan.kdbx"
+    create_database(str(db_path), password="pw")
+    seed = PyKeePass(str(db_path), password="pw")
+    seed.add_entry(seed.root_group, title="Existing", username="u", password="v")
+    seed.save()
+
+    cfg_path = tmp_path / ".keeenv"
+    cfg_path.write_text(
+        f'[keepass]\ndatabase = {db_path}\n\n[env]\nDUP = ${{"Existing".password}}\n',
+        encoding="utf-8",
+    )
+
+    result = run_cli(
+        [
+            "--config",
+            str(cfg_path),
+            "add",
+            "DUP",
+            "newvalue",
+            "-t",
+            "BrandNewTitle",
+        ],
+        cwd=tmp_path,
+        env={"KEEENV_PASSWORD": "pw"},
+        input_text="n\n",
+    )
+    assert result.returncode != 0
+
+    verify = PyKeePass(str(db_path), password="pw")
+    assert verify.find_entries(title="BrandNewTitle", first=True) is None
+    assert 'DUP = ${"Existing".password}' in cfg_path.read_text()
+
+
+def test_add_force_writes_both_stores(tmp_path):
+    """--force writes the entry to both the database and the config."""
+    from pykeepass import PyKeePass, create_database
+
+    db_path = tmp_path / "both.kdbx"
+    create_database(str(db_path), password="pw")
+    cfg_path = tmp_path / ".keeenv"
+    cfg_path.write_text(f"[keepass]\ndatabase = {db_path}\n\n[env]\n", encoding="utf-8")
+
+    result = run_cli(
+        ["--config", str(cfg_path), "add", "FORCED", "val", "--force"],
+        cwd=tmp_path,
+        env={"KEEENV_PASSWORD": "pw"},
+    )
+    assert result.returncode == 0, result.stderr
+
+    verify = PyKeePass(str(db_path), password="pw")
+    assert verify.find_entries(title="FORCED", first=True) is not None
+    assert 'FORCED = ${"FORCED".password}' in cfg_path.read_text()
+
+
 def test_add_creates_env_section_when_absent(tmp_path):
     """`add` must work against a config that has no [env] section yet."""
     from pykeepass import create_database

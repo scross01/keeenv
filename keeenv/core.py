@@ -519,10 +519,33 @@ def _cmd_add(
     eff_attr_valid = AttributeValidator.validate_attribute(eff_attr)
     attr_lower = eff_attr_valid.lower()
 
-    # Use KeePassManager for database operations
+    # Compute the placeholder and resolve mapping conflicts BEFORE any durable
+    # write. Both cancel points must precede both stores, otherwise declining
+    # the mapping prompt leaves an orphaned KeePass entry behind.
+    # Constructing KeePassManager does not open the database.
     kp_manager = KeePassManager(db_path, keyfile_path)
+    placeholder = kp_manager.format_placeholder(eff_title, eff_attr_valid)
+
+    if ENV_SECTION not in cfg:
+        cfg[ENV_SECTION] = {}
+
+    existing_mapping = cfg[ENV_SECTION].get(env_var)
+    if existing_mapping is not None and not force:
+        choice = (
+            _prompt_input(
+                f"Variable '{env_var}' already exists in {config_path}. Overwrite mapping? [y/N]: "
+            )
+            .strip()
+            .lower()
+        )
+        if choice not in ("y", "yes"):
+            raise ValidationError("Add cancelled by user (existing .keeenv mapping).")
+
+    # Use KeePassManager for database operations
     kp_manager.connect_with_password_fallback()
 
+    created_entry = False
+    created_title = eff_title
     try:
         # Find or create the entry using KeePassManager
         entry, group_for_entry, final_title = kp_manager.find_entry(
@@ -548,6 +571,8 @@ def _cmd_add(
                 password="",  # set after based on attribute
                 group=group_for_entry,
             )
+            created_entry = True
+            created_title = final_title
         else:
             # update username if requested
             if username is not None:
@@ -569,32 +594,38 @@ def _cmd_add(
         # Ensure database connection is closed
         kp_manager.disconnect()
 
-    # Update .keeenv mapping using KeeenvConfig
-    # Compute placeholder syntax using KeePassManager
-    placeholder = kp_manager.format_placeholder(eff_title, eff_attr_valid)
-
-    # Preserve exact case of env_var when writing
-    # Ensure [env] exists (configs created by `init` may lack it)
-    if ENV_SECTION not in cfg:
-        cfg[ENV_SECTION] = {}
-
-    # If mapping already exists and not forcing, prompt before overwrite
-    existing_mapping = cfg[ENV_SECTION].get(env_var)
-    if existing_mapping is not None and not force:
-        choice = (
-            _prompt_input(
-                f"Variable '{env_var}' already exists in {config_path}. Overwrite mapping? [y/N]: "
-            )
-            .strip()
-            .lower()
-        )
-        if choice not in ("y", "yes"):
-            raise ValidationError("Add cancelled by user (existing .keeenv mapping).")
-
     cfg[ENV_SECTION][env_var] = placeholder
 
     # Write config back to disk using KeeenvConfig
-    config_manager.save_config(cfg)
+    try:
+        config_manager.save_config(cfg)
+    except Exception:
+        if created_entry:
+            # Best-effort cleanup of the entry this run created. An entry we
+            # only updated cannot be restored here; KeePass clients keep their
+            # own file version history for that case.
+            rollback = KeePassManager(db_path, keyfile_path)
+            try:
+                rollback.connect_with_password_fallback()
+                found, _, _ = rollback.find_entry(created_title)
+                if found is not None:
+                    rollback.delete_entry(found)
+                    rollback.save_database()
+            except Exception:
+                logger.error(
+                    "Failed to roll back KeePass entry '%s' after config write "
+                    "failure; the entry may remain in the database",
+                    created_title,
+                )
+            finally:
+                rollback.disconnect()
+        else:
+            logger.error(
+                "Config write failed after updating existing KeePass entry '%s'; "
+                "the previous secret value cannot be restored automatically",
+                created_title,
+            )
+        raise
 
     logger.info(
         "Added/updated KeePass entry '%s' and mapped %s in %s",

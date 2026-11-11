@@ -289,6 +289,26 @@ class TestFormatPlaceholder:
         assert result == '${"test_entry"."API Key"}'
 
 
+class TestDeleteEntry:
+    """Tests for delete_entry method."""
+
+    def test_delete_entry_not_connected(self, manager):
+        """Test deleting an entry when not connected."""
+        with pytest.raises(KeePassError):
+            manager.delete_entry(Mock())
+
+    def test_delete_entry_success(self, manager):
+        """Test deleting an entry delegates to pykeepass."""
+        mock_kp = Mock()
+        manager.kp = mock_kp
+        manager._is_connected = True
+        entry = Mock()
+
+        manager.delete_entry(entry)
+
+        mock_kp.delete_entry.assert_called_once_with(entry)
+
+
 class TestSaveDatabase:
     """Tests for save_database method."""
 
