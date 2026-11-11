@@ -686,7 +686,10 @@ def _cmd_run(*, config_path: str, command: list[str]) -> None:
         # can find the executable.
         if len(command) == 1:
             command = shlex.split(command[0])
-        result = subprocess.run(command, env=full_env, shell=False)
+        try:
+            result = subprocess.run(command, env=full_env, shell=False)
+        except FileNotFoundError:
+            raise ValidationError(f"Command not found: {command[0]}")
 
         # Forward the exit code
         sys.exit(result.returncode)

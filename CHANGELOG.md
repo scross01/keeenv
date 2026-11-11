@@ -1,5 +1,9 @@
 # Change Log
 
+## Unreleased
+
+- Fixed `run` command to fail cleanly with a clear error when the requested command is not found, instead of printing a traceback.
+
 ## v0.6.0
 
 - Added `KEEENV_PASSWORD` environment variable support for non-interactive authentication in CI/CD pipelines, Docker containers, and scripted workflows.
