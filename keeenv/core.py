@@ -716,8 +716,11 @@ def _cmd_run(*, config_path: str, command: list[str]) -> None:
         logger.info("Executing command: %s", " ".join(command))
         # Do not log resolved env vars; values may contain secrets.
 
-        # Create a copy of the current environment and add our variables
+        # Create a copy of the current environment and add our variables.
+        # The master-password auth variable is an input to keeenv, not part of
+        # the child's environment; never forward it to subprocesses.
         full_env = os.environ.copy()
+        full_env.pop("KEEENV_PASSWORD", None)
         full_env.update(env_vars)
 
         # Execute the command (list form, no shell for security)

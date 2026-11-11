@@ -259,6 +259,34 @@ def test_add_and_eval_entry_title_with_percent(tmp_path):
     assert "export PCT_VAR=pctsecret" in evaluated.stdout
 
 
+def test_run_does_not_forward_master_password(tmp_path, kdbx_db):
+    """The auth variable must not leak into the child process environment."""
+    db_path, _ = kdbx_db
+    cfg_path = tmp_path / ".keeenv"
+    cfg_path.write_text(
+        "[keepass]\n"
+        f"database = {db_path}\n\n"
+        "[env]\n"
+        'RUN_VAR = ${"TestSecret".password}\n',
+        encoding="utf-8",
+    )
+    result = run_cli(
+        [
+            "run",
+            "sh",
+            "-c",
+            "echo PWVAR=${KEEENV_PASSWORD:-unset}; echo SECRET=$RUN_VAR",
+        ],
+        cwd=tmp_path,
+        env={"KEEENV_PASSWORD": "testpass"},
+    )
+    assert result.returncode == 0, result.stderr
+    assert "PWVAR=unset" in result.stdout
+    assert "PWVAR=testpass" not in result.stdout
+    # sanity: the intended secret did resolve for the child
+    assert "SECRET=pass123" in result.stdout
+
+
 def test_run_passes_dash_prefixed_args(tmp_path, kdbx_config):
     """Child flags are passed through, not consumed by keeenv's parser."""
     result = run_cli(
