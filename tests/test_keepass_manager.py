@@ -7,7 +7,11 @@ from unittest.mock import Mock, patch
 import pytest
 from pykeepass.exceptions import CredentialsError as PyKPCredentialsError
 
-from keeenv.exceptions import KeePassError
+from keeenv.exceptions import (
+    KeePassEntryNotFoundError,
+    KeePassError,
+    ValidationError,
+)
 from keeenv.keepass import KeePassManager
 
 
@@ -222,6 +226,53 @@ class TestSubstitutePlaceholders:
 
         assert result == "secret123"
         connected_manager.get_secret.assert_called_once_with("test", "password")
+
+    def test_nonstrict_missing_entry_blanks_and_warns(self, connected_manager, caplog):
+        """A missing entry is recoverable in non-strict mode: blank + warn."""
+        connected_manager.get_secret = Mock(
+            side_effect=KeePassEntryNotFoundError("Entry with title 'nope' not found")
+        )
+
+        with caplog.at_level("WARNING"):
+            result = connected_manager.substitute_placeholders(
+                '${"nope".password}', strict=False
+            )
+
+        assert result == ""
+        assert any("Failed to resolve placeholder" in r.message for r in caplog.records)
+
+    def test_strict_missing_entry_raises(self, connected_manager):
+        """Strict mode must fail on a missing entry."""
+        connected_manager.get_secret = Mock(
+            side_effect=KeePassEntryNotFoundError("Entry with title 'nope' not found")
+        )
+
+        with pytest.raises(ValidationError):
+            connected_manager.substitute_placeholders('${"nope".password}', strict=True)
+
+    def test_nonstrict_resolves_others_around_missing(self, connected_manager):
+        """One missing placeholder must not prevent resolving its siblings."""
+        connected_manager.get_secret = Mock(
+            side_effect=[
+                "s3cret",
+                KeePassEntryNotFoundError("Entry with title 'nope' not found"),
+            ]
+        )
+
+        result = connected_manager.substitute_placeholders(
+            '${"good".password}-${"nope".password}', strict=False
+        )
+
+        assert result == "s3cret-"
+
+    def test_nonstrict_reraises_real_db_failure(self, connected_manager):
+        """A genuine database failure must never be blanked, even non-strict."""
+        connected_manager.get_secret = Mock(
+            side_effect=KeePassError("Failed to open database: corrupt")
+        )
+
+        with pytest.raises(KeePassError, match="corrupt"):
+            connected_manager.substitute_placeholders('${"a".password}', strict=False)
 
 
 class TestFormatPlaceholder:

@@ -173,25 +173,6 @@ def test_list_rejects_invalid_env_var_name(tmp_path: Path):
     assert "Invalid environment variable name" in proc.stderr
 
 
-def test_eval_non_strict_blanks_unresolved_placeholders(tmp_path: Path):
-    # Non-strict should not crash due to unresolved placeholders during substitution.
-    # Because db is missing it will still fail; this verifies non-strict invocation path.
-    cfg = write_config(
-        tmp_path,
-        """
-        [keepass]
-        database = ./missing-db.kdbx
-
-        [env]
-        FOO = ${"Nonexistent".password}
-        """,
-    )
-    proc = run_cli(["--config", str(cfg), "eval"])
-    assert proc.returncode == 1
-    assert "database" in proc.stderr.lower() or "missing" in proc.stderr.lower()
-    assert "unresolved" not in proc.stderr.lower()
-
-
 # --- New tests for `keeenv init` subcommand ---
 
 

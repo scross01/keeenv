@@ -220,7 +220,9 @@ class KeePassManager:
 
             entry, _, _ = self.find_entry(validated_title, create_if_missing=False)
             if entry is None:
-                raise KeePassError(f"Entry with title '{validated_title}' not found")
+                raise KeePassEntryNotFoundError(
+                    f"Entry with title '{validated_title}' not found"
+                )
 
             # Try standard attributes first
             standard_value = self._get_standard_attribute(entry, validated_attr)
@@ -232,18 +234,24 @@ class KeePassManager:
             if custom_value is not None:
                 return custom_value
 
-            # Attribute not found -> let it fall through to generic wrapper for test expectation
-            raise AttributeError(validated_attr)
+            # Attribute missing on an entry that exists: a lookup miss, not a
+            # database failure. Typed so non-strict substitution can recover.
+            raise KeePassEntryNotFoundError(
+                f"Attribute '{validated_attr}' not found on entry '{validated_title}'"
+            )
         except (
             ValidationError,
             KeePassCredentialsError,
             SecurityError,
             ConfigError,
+            KeePassEntryNotFoundError,
         ):
-            # Preserve explicit domain exceptions that should map directly
+            # Preserve explicit domain exceptions that should map directly.
+            # KeePassEntryNotFoundError MUST be here: it subclasses KeePassError,
+            # and the catch-all below would otherwise flatten it into a generic
+            # KeePassError, losing the distinction non-strict mode relies on.
             raise
         except Exception as e:
-            # Minimal context wrapper to match expected message in tests
             raise KeePassError(f"Failed to access entry '{title}': {str(e)}")
 
     def _get_standard_attribute(self, entry, attribute: str) -> str | None:
@@ -328,21 +336,33 @@ class KeePassManager:
                     raise ValidationError(f"Unresolved placeholder: {placeholder}")
                 logger.warning("Could not resolve placeholder %s", placeholder)
                 return ""
-            except (KeePassError, ValidationError) as e:
+            except KeePassEntryNotFoundError as e:
+                # A missing entry/attribute is recoverable: blank it with a
+                # warning unless strict mode was requested.
                 if strict:
-                    # Re-raise as ValidationError to enforce strict mode
-                    raise ValidationError(str(e))
-                elif isinstance(e, KeePassError):
-                    # For KeePassError, always re-raise since it's a connection/configuration issue
-                    raise
-                else:
-                    # For ValidationError, only log in non-strict mode
-                    logger.warning(
-                        "Failed to resolve placeholder %s: %s",
-                        placeholder,
-                        str(e),
-                    )
-                    return ""
+                    raise ValidationError(str(e)) from None
+                logger.warning(
+                    "Failed to resolve placeholder %s: %s",
+                    placeholder,
+                    str(e),
+                )
+                return ""
+            except ValidationError as e:
+                if strict:
+                    raise ValidationError(str(e)) from None
+                logger.warning(
+                    "Failed to resolve placeholder %s: %s",
+                    placeholder,
+                    str(e),
+                )
+                return ""
+            except KeePassError as e:
+                # Genuine database failure (corrupt file, revoked key, pykeepass
+                # error). Never blank it silently: exporting an empty secret and
+                # exiting 0 would hide a broken database.
+                if strict:
+                    raise ValidationError(str(e)) from None
+                raise
 
         return PLACEHOLDER_REGEX.sub(_replace, value_template)
 

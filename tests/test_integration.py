@@ -91,6 +91,64 @@ def test_run_executes_command_with_secrets(tmp_path, kdbx_db):
     assert "pass123" in result.stdout
 
 
+def test_eval_nonstrict_partial_export(tmp_path, kdbx_db):
+    """Non-strict eval exports resolvable vars and blanks the missing one."""
+    db_path, _ = kdbx_db
+    cfg = tmp_path / ".keeenv"
+    cfg.write_text(
+        "[keepass]\n"
+        f"database = {db_path}\n\n"
+        "[env]\n"
+        'GOOD = ${"TestSecret".password}\n'
+        'BAD = ${"DoesNotExist".password}\n',
+        encoding="utf-8",
+    )
+    result = run_cli(["eval"], cwd=tmp_path, env={"KEEENV_PASSWORD": "testpass"})
+    assert result.returncode == 0, result.stderr
+    assert "export GOOD=pass123" in result.stdout
+    # The unresolved variable is blanked, not fatal: it is still exported, empty.
+    assert "export BAD=''" in result.stdout
+
+
+def test_eval_strict_fails_on_missing_entry(tmp_path, kdbx_db):
+    """Strict eval must fail when one placeholder cannot be resolved."""
+    db_path, _ = kdbx_db
+    cfg = tmp_path / ".keeenv"
+    cfg.write_text(
+        "[keepass]\n"
+        f"database = {db_path}\n\n"
+        "[env]\n"
+        'GOOD = ${"TestSecret".password}\n'
+        'BAD = ${"DoesNotExist".password}\n',
+        encoding="utf-8",
+    )
+    result = run_cli(
+        ["--strict", "eval"], cwd=tmp_path, env={"KEEENV_PASSWORD": "testpass"}
+    )
+    assert result.returncode == 1
+    assert result.stdout.strip() == ""
+
+
+def test_run_still_fails_closed_on_missing_entry(tmp_path, kdbx_db):
+    """`run` keeps strict resolution: a child must not launch with blank secrets."""
+    db_path, _ = kdbx_db
+    cfg = tmp_path / ".keeenv"
+    cfg.write_text(
+        "[keepass]\n"
+        f"database = {db_path}\n\n"
+        "[env]\n"
+        'BAD = ${"DoesNotExist".password}\n',
+        encoding="utf-8",
+    )
+    result = run_cli(
+        ["run", "echo", "should-not-run"],
+        cwd=tmp_path,
+        env={"KEEENV_PASSWORD": "testpass"},
+    )
+    assert result.returncode == 1
+    assert "should-not-run" not in result.stdout
+
+
 def test_eval_preserves_custom_attribute_case(tmp_path, kdbx_db):
     """Custom attribute names with mixed case and spaces work correctly."""
     db_path, _ = kdbx_db
