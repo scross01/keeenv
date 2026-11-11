@@ -13,12 +13,9 @@ wheels/
 *.kdbx
 .env
 .python-version
-uv.lock
 .keeenv
 .coverage
 
 .poolside
 
 Makefile
-
-plans/
