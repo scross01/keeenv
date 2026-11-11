@@ -1,4 +1,4 @@
-from keeenv import main
+from keeenv.main import main
 
 if __name__ == "__main__":
     main()

@@ -8,7 +8,3 @@ placing passwords and api keys in plain text on the local file system.
 """
 
 __version__ = "0.6.0"
-
-from .core import main
-
-__all__ = ["main"]

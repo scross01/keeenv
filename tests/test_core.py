@@ -1011,3 +1011,18 @@ class TestInitConfigInteractive:
         content = target.read_text()
         assert str(db) in content
         assert "[env]" in content
+
+
+def test_main_import_is_unambiguous():
+    """`keeenv.main` must resolve to the module, not a shadowing function."""
+    import importlib
+    import types
+
+    import keeenv
+
+    pkg_main = getattr(keeenv, "main", None)
+    imported = importlib.import_module("keeenv.main")
+    assert isinstance(imported, types.ModuleType)
+    assert callable(imported.main)
+    # The package must not export a competing callable under the same name.
+    assert not callable(pkg_main) or isinstance(pkg_main, types.ModuleType)
