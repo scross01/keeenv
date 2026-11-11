@@ -93,6 +93,21 @@ class KeeenvConfig:
             )
         return self.validate_config_file(config_path)
 
+    def _resolve_keepass_path(self, raw_path: str) -> str:
+        """
+        Resolve a [keepass] path relative to the config file's directory.
+
+        A relative ``database``/``keyfile`` is interpreted relative to the
+        ``.keeenv`` file that references it, not the process working directory,
+        so ``keeenv --config ./config/.keeenv eval`` works from anywhere.
+        Absolute and ``~``-prefixed paths are left as the user wrote them.
+        """
+        expanded = os.path.expanduser(raw_path)
+        if not os.path.isabs(expanded):
+            base = os.path.dirname(os.path.abspath(self.config_path))
+            expanded = os.path.join(base, expanded)
+        return expanded
+
     def validate_keepass_config(
         self,
         config: configparser.ConfigParser,
@@ -114,16 +129,18 @@ class KeeenvConfig:
                 ERROR_KEY_MISSING.format(key="database", section=KEEPASS_SECTION)
             )
 
-        # Validate database path
+        # Validate database path (relative paths are config-dir relative)
         validated_db_path = str(
-            PathValidator.validate_file_path(os.path.expanduser(db_path))
+            PathValidator.validate_file_path(self._resolve_keepass_path(db_path))
         )
 
         # Validate keyfile path if present
         validated_keyfile_path = None
         if keyfile_path:
             validated_keyfile_path = str(
-                PathValidator.validate_file_path(os.path.expanduser(keyfile_path))
+                PathValidator.validate_file_path(
+                    self._resolve_keepass_path(keyfile_path)
+                )
             )
 
         # Validate file security

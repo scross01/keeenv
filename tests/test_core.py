@@ -152,6 +152,30 @@ class TestConfigInterpolation:
         )
 
 
+class TestResolveKeepassPath:
+    """Relative [keepass] paths resolve against the config file's directory."""
+
+    def test_relative_path_is_config_dir_relative(self):
+        cfg = KeeenvConfig("/tmp/proj/.keeenv")
+        assert cfg._resolve_keepass_path("secrets.kdbx") == "/tmp/proj/secrets.kdbx"
+
+    def test_relative_path_in_subdirectory(self):
+        cfg = KeeenvConfig("/tmp/proj/config/.keeenv")
+        assert cfg._resolve_keepass_path("secrets.kdbx") == (
+            "/tmp/proj/config/secrets.kdbx"
+        )
+
+    def test_absolute_path_is_unchanged(self):
+        cfg = KeeenvConfig("/tmp/proj/.keeenv")
+        assert cfg._resolve_keepass_path("/abs/secrets.kdbx") == "/abs/secrets.kdbx"
+
+    def test_home_path_expands_without_config_dir(self):
+        cfg = KeeenvConfig("/tmp/proj/.keeenv")
+        assert cfg._resolve_keepass_path("~/secrets.kdbx") == (
+            str(Path.home() / "secrets.kdbx")
+        )
+
+
 class TestMainFunction:
     """Test main function"""
 

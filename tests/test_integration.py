@@ -259,6 +259,34 @@ def test_add_and_eval_entry_title_with_percent(tmp_path):
     assert "export PCT_VAR=pctsecret" in evaluated.stdout
 
 
+def test_config_relative_database_path_resolves_from_other_cwd(tmp_path):
+    """`--config sub/.keeenv` works when the database path is relative to it."""
+    from pykeepass import PyKeePass, create_database
+
+    cfg_dir = tmp_path / "cfgdir"
+    cfg_dir.mkdir()
+    db_path = cfg_dir / "local.kdbx"
+    create_database(str(db_path), password="pw")
+    kp = PyKeePass(str(db_path), password="pw")
+    kp.add_entry(kp.root_group, title="Rel", username="", password="relsecret")
+    kp.save()
+
+    cfg_path = cfg_dir / ".keeenv"
+    cfg_path.write_text(
+        '[keepass]\ndatabase = local.kdbx\n\n[env]\nREL = ${"Rel".password}\n',
+        encoding="utf-8",
+    )
+
+    # Run from the parent directory, not cfgdir.
+    result = run_cli(
+        ["--config", str(cfg_path), "eval"],
+        cwd=tmp_path,
+        env={"KEEENV_PASSWORD": "pw"},
+    )
+    assert result.returncode == 0, result.stderr
+    assert "export REL=relsecret" in result.stdout
+
+
 def test_run_does_not_forward_master_password(tmp_path, kdbx_db):
     """The auth variable must not leak into the child process environment."""
     db_path, _ = kdbx_db
